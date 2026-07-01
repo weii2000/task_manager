@@ -1,0 +1,15 @@
+[project]
+name = "task-manager"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "aiomysql>=0.3.2",
+    "alembic>=1.18.5",
+    "bcrypt==4.0.1",
+    "fastapi[standard]>=0.139.0",
+    "passlib[bcrypt]>=1.7.4",
+    "pydantic-settings>=2.14.2",
+    "pyjwt>=2.13.0",
+    "python-dotenv>=1.2.2",
+    "sqlalchemy[asyncio]>=2.0.51",
+]

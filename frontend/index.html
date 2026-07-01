@@ -1,0 +1,1096 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <title>今日清单</title>
+  <style>
+    :root {
+      --ink: #18211d;
+      --muted: #68736d;
+      --line: #dce2de;
+      --paper: #f8faf8;
+      --panel: #ffffff;
+      --green: #18794e;
+      --green-dark: #0e5d3b;
+      --green-soft: #e5f3eb;
+      --yellow: #f3b61f;
+      --red: #b42318;
+      --shadow: 0 18px 55px rgba(33, 51, 42, 0.11);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      min-height: 100vh;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+    button, input, textarea { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible, textarea:focus-visible {
+      outline: 3px solid rgba(24, 121, 78, 0.22);
+      outline-offset: 2px;
+    }
+    .hidden { display: none !important; }
+
+    .auth-shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(320px, 1.05fr) minmax(420px, .95fr);
+    }
+    .auth-story {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 42px clamp(30px, 6vw, 90px);
+      color: #fff;
+      background: #143f2d;
+      position: relative;
+      overflow: hidden;
+    }
+    .auth-story::after {
+      content: "";
+      position: absolute;
+      width: 54%;
+      aspect-ratio: 1;
+      right: -12%;
+      bottom: -12%;
+      border: 72px solid rgba(243, 182, 31, .92);
+      border-radius: 50%;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; font-weight: 750; position: relative; z-index: 1; }
+    .brand-mark {
+      width: 35px; height: 35px; display: grid; place-items: center;
+      color: #143f2d; background: var(--yellow); border-radius: 7px;
+    }
+    .story-copy { max-width: 590px; position: relative; z-index: 1; }
+    .story-copy p { margin: 0 0 16px; color: #bcd2c6; font-size: 14px; font-weight: 700; }
+    .story-copy h1 { margin: 0; max-width: 560px; font-size: clamp(42px, 5.3vw, 76px); line-height: 1.04; letter-spacing: 0; }
+    .story-foot { color: #bcd2c6; font-size: 13px; position: relative; z-index: 1; }
+
+    .auth-panel { display: grid; place-items: center; padding: 32px; background: #fff; }
+    .auth-box { width: min(100%, 410px); }
+    .auth-box h2 { margin: 0 0 8px; font-size: 30px; }
+    .auth-lead { margin: 0 0 28px; color: var(--muted); }
+    .tabs { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--line); margin-bottom: 25px; }
+    .tab {
+      border: 0; border-bottom: 3px solid transparent; padding: 12px;
+      color: var(--muted); background: transparent; font-weight: 700;
+    }
+    .tab.active { color: var(--green); border-color: var(--green); }
+    .field { display: grid; gap: 8px; margin-bottom: 17px; }
+    .field label { font-size: 13px; font-weight: 700; }
+    .field input, .task-inputs input, .task-inputs textarea {
+      width: 100%; border: 1px solid var(--line); border-radius: 6px;
+      padding: 12px 13px; color: var(--ink); background: #fff;
+    }
+    .field input:hover, .task-inputs input:hover, .task-inputs textarea:hover { border-color: #aeb9b2; }
+    .submit {
+      width: 100%; border: 0; border-radius: 6px; padding: 13px 18px;
+      color: white; background: var(--green); font-weight: 750; margin-top: 7px;
+    }
+    .submit:hover { background: var(--green-dark); }
+    .submit:disabled { opacity: .6; cursor: wait; }
+    .form-message { min-height: 22px; margin: 14px 0 0; color: var(--red); font-size: 13px; }
+
+    .app-shell { min-height: 100vh; }
+    .topbar {
+      height: 68px; display: flex; align-items: center; justify-content: space-between;
+      padding: 0 clamp(20px, 5vw, 72px); border-bottom: 1px solid var(--line); background: #fff;
+      position: sticky; top: 0; z-index: 5;
+    }
+    .topbar .brand { color: var(--ink); }
+    .app-nav { display: flex; align-self: stretch; gap: 4px; margin-left: auto; margin-right: 24px; }
+    .nav-button {
+      min-width: 72px; border: 0; border-bottom: 3px solid transparent;
+      color: var(--muted); background: transparent; font-weight: 700;
+    }
+    .nav-button:hover { color: var(--ink); }
+    .nav-button.active { color: var(--green); border-bottom-color: var(--green); }
+    .topbar-actions { display: flex; align-items: center; gap: 12px; }
+    .user-chip { text-align: right; }
+    .user-chip strong, .user-chip small { display: block; }
+    .user-chip small { color: var(--muted); font-size: 11px; margin-top: 2px; }
+    .icon-button {
+      width: 38px; height: 38px; display: grid; place-items: center; border-radius: 6px;
+      border: 1px solid var(--line); color: var(--muted); background: #fff;
+    }
+    .icon-button:hover { color: var(--red); border-color: #e7b7b3; background: #fff7f6; }
+    .app-main { width: min(1120px, calc(100% - 40px)); margin: 0 auto; padding: 46px 0 70px; }
+    .page-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; margin-bottom: 28px; }
+    .eyebrow { color: var(--green); font-size: 12px; font-weight: 800; text-transform: uppercase; }
+    .page-heading h1 { margin: 6px 0 6px; font-size: clamp(30px, 4vw, 44px); }
+    .page-heading p { margin: 0; color: var(--muted); }
+    .date-card { min-width: 124px; padding-left: 22px; border-left: 3px solid var(--yellow); }
+    .date-card strong, .date-card span { display: block; }
+    .date-card strong { font-size: 28px; }
+    .date-card span { color: var(--muted); font-size: 12px; }
+
+    .workspace { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 24px; align-items: start; }
+    .task-panel { border-top: 3px solid var(--ink); background: var(--panel); box-shadow: var(--shadow); }
+    .task-compose { padding: 22px; border-bottom: 1px solid var(--line); }
+    .filter-form { display: grid; grid-template-columns: auto minmax(120px, 190px) auto auto; gap: 10px; margin-bottom: 14px; }
+    .filter-segment {
+      display: inline-grid; grid-template-columns: repeat(3, minmax(62px, 1fr));
+      border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: #fff;
+    }
+    .filter-status {
+      border: 0; border-right: 1px solid var(--line); padding: 10px 12px;
+      color: var(--muted); background: #fff; font-size: 13px; font-weight: 750;
+    }
+    .filter-status:last-child { border-right: 0; }
+    .filter-status.active { color: #fff; background: var(--ink); }
+    .filter-form input {
+      width: 100%; border: 1px solid var(--line); border-radius: 6px;
+      padding: 10px 12px; color: var(--ink); background: #fff;
+    }
+    .filter-action {
+      border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px;
+      color: var(--ink); background: #fff; font-weight: 750;
+    }
+    .filter-action:hover { border-color: #aeb9b2; background: #f5f8f6; }
+    .task-inputs { display: grid; grid-template-columns: minmax(0, 1fr) 170px 48px; gap: 10px; }
+    .task-inputs textarea { grid-column: 1 / 3; resize: vertical; min-height: 72px; }
+    .add-button {
+      min-width: 48px; border: 0; border-radius: 6px; color: #fff; background: var(--green);
+      font-size: 24px; font-weight: 300;
+    }
+    .add-button:hover { background: var(--green-dark); }
+    .add-button:disabled { opacity: .6; cursor: wait; }
+    .task-message { grid-column: 1 / -1; min-height: 18px; margin: 0; color: var(--red); font-size: 12px; }
+    .task-list { margin: 0; padding: 0; list-style: none; }
+    .task-item {
+      min-height: 74px; display: grid; grid-template-columns: 24px minmax(0, 1fr) 38px;
+      gap: 13px; align-items: center; padding: 15px 20px; border-bottom: 1px solid var(--line);
+    }
+    .task-item.pending { opacity: .64; }
+    .task-item:last-child { border-bottom: 0; }
+    .check {
+      width: 21px; height: 21px; border: 2px solid #aeb9b2; border-radius: 5px;
+      display: grid; place-items: center; background: #fff; color: #fff;
+    }
+    .check:disabled, .delete-button:disabled { cursor: wait; }
+    .check.done { background: var(--green); border-color: var(--green); }
+    .task-copy { min-width: 0; }
+    .task-copy strong { display: block; overflow-wrap: anywhere; }
+    .task-copy small { display: block; color: var(--muted); margin-top: 4px; overflow-wrap: anywhere; }
+    .task-meta { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; margin-top: 5px; }
+    .task-meta small { margin-top: 0; }
+    .task-tag {
+      display: inline-flex; align-items: center; min-height: 22px; padding: 2px 7px;
+      border-radius: 4px; color: var(--green-dark); background: var(--green-soft);
+      font-size: 11px; font-weight: 800;
+    }
+    .task-item.completed .task-copy strong { color: var(--muted); text-decoration: line-through; }
+    .delete-button { opacity: 0; }
+    .task-item:hover .delete-button, .delete-button:focus-visible { opacity: 1; }
+    .empty { padding: 56px 24px; text-align: center; color: var(--muted); }
+    .empty strong { display: block; color: var(--ink); margin-bottom: 7px; }
+
+    .side { display: grid; gap: 20px; }
+    .stats, .profile { padding: 22px; border: 1px solid var(--line); background: #fff; }
+    .side h2 { margin: 0 0 18px; font-size: 15px; }
+    .progress { height: 8px; border-radius: 4px; background: #e8ece9; overflow: hidden; }
+    .progress-bar { height: 100%; width: 0; background: var(--yellow); transition: width .25s ease; }
+    .stats-row { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 10px; }
+    .profile dl { margin: 0; display: grid; gap: 14px; }
+    .profile dt { color: var(--muted); font-size: 11px; margin-bottom: 3px; }
+    .profile dd { margin: 0; font-size: 13px; font-weight: 650; overflow-wrap: anywhere; }
+    .me-heading { align-items: center; }
+    .refresh-button {
+      display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line);
+      border-radius: 6px; padding: 10px 14px; color: var(--ink); background: #fff; font-weight: 700;
+    }
+    .refresh-button:hover { border-color: #aeb9b2; background: #f5f8f6; }
+    .refresh-button:disabled { color: var(--muted); cursor: wait; }
+    .me-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 28px; align-items: start; }
+    .identity-block { padding: 26px 0; text-align: center; }
+    .avatar {
+      width: 92px; height: 92px; display: grid; place-items: center; margin: 0 auto 16px;
+      border-radius: 50%; color: #fff; background: var(--green); font-size: 38px; font-weight: 800;
+    }
+    .identity-block h2 { margin: 0 0 5px; font-size: 21px; overflow-wrap: anywhere; }
+    .identity-block p { margin: 0; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+    .account-panel { border-top: 3px solid var(--ink); background: #fff; box-shadow: var(--shadow); }
+    .account-panel-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 20px;
+      padding: 22px 24px; border-bottom: 1px solid var(--line);
+    }
+    .account-panel-head h2 { margin: 0; font-size: 17px; }
+    .status-badge { color: var(--green-dark); background: var(--green-soft); padding: 5px 9px; border-radius: 4px; font-size: 11px; font-weight: 800; }
+    .account-rows { margin: 0; }
+    .account-row {
+      min-height: 76px; display: grid; grid-template-columns: 150px minmax(0, 1fr);
+      align-items: center; gap: 20px; padding: 18px 24px; border-bottom: 1px solid var(--line);
+    }
+    .account-row:last-child { border-bottom: 0; }
+    .account-row dt { color: var(--muted); font-size: 12px; }
+    .account-row dd { margin: 0; font-weight: 700; overflow-wrap: anywhere; }
+    .profile-form { margin: 0; }
+    .profile-field {
+      min-height: 96px; display: grid; grid-template-columns: 150px minmax(0, 1fr);
+      align-items: start; gap: 20px; padding: 18px 24px; border-bottom: 1px solid var(--line);
+    }
+    .profile-field span { color: var(--muted); font-size: 12px; padding-top: 12px; }
+    .profile-field input, .profile-field textarea {
+      width: 100%; border: 1px solid var(--line); border-radius: 6px;
+      padding: 12px 13px; color: var(--ink); background: #fff;
+    }
+    .profile-field textarea { min-height: 88px; resize: vertical; }
+    .profile-actions {
+      display: flex; justify-content: flex-end; align-items: center; gap: 12px;
+      padding: 18px 24px;
+    }
+    .profile-actions .submit { width: auto; min-width: 110px; margin: 0; }
+    .me-message { margin: 18px 0 0; color: var(--red); font-size: 13px; }
+    .toast {
+      position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 14px);
+      padding: 11px 16px; border-radius: 6px; color: #fff; background: var(--ink);
+      box-shadow: var(--shadow); opacity: 0; pointer-events: none; transition: .2s ease;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+    @media (max-width: 820px) {
+      .auth-shell { grid-template-columns: 1fr; }
+      .auth-story { min-height: 290px; padding: 28px; }
+      .story-copy h1 { font-size: clamp(36px, 10vw, 54px); }
+      .story-foot { display: none; }
+      .auth-panel { padding: 38px 24px; }
+      .workspace { grid-template-columns: 1fr; }
+      .side { grid-template-columns: 1fr 1fr; }
+      .me-layout { grid-template-columns: 1fr; }
+      .identity-block { display: grid; grid-template-columns: 72px minmax(0, 1fr); column-gap: 16px; text-align: left; }
+      .avatar { grid-row: 1 / 3; width: 72px; height: 72px; margin: 0; font-size: 29px; }
+      .identity-block h2 { align-self: end; }
+    }
+    @media (max-width: 560px) {
+      .auth-story { min-height: 250px; }
+      .auth-story::after { border-width: 45px; }
+      .topbar { padding: 0 16px; }
+      .topbar .brand span:last-child { display: none; }
+      .app-nav { margin: 0 auto; }
+      .nav-button { min-width: 58px; }
+      .user-chip small { display: none; }
+      .user-chip { display: none; }
+      .app-main { width: min(100% - 28px, 1120px); padding-top: 30px; }
+      .page-heading { align-items: flex-start; }
+      .date-card { display: none; }
+      .side { grid-template-columns: 1fr; }
+      .filter-form { grid-template-columns: 1fr; }
+      .task-inputs { grid-template-columns: 1fr; }
+      .task-inputs textarea, .task-message { grid-column: 1; }
+      .task-compose { padding: 14px; }
+      .task-item { padding: 14px; }
+      .delete-button { opacity: 1; }
+      .account-row { grid-template-columns: 1fr; gap: 5px; }
+      .profile-field { grid-template-columns: 1fr; gap: 8px; }
+      .profile-field span { padding-top: 0; }
+    }
+  </style>
+</head>
+<body>
+  <section id="authView" class="auth-shell">
+    <div class="auth-story">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">✓</span>
+        <span>今日清单</span>
+      </div>
+      <div class="story-copy">
+        <p>轻装前行，专注当下</p>
+        <h1>把重要的事，一件件完成。</h1>
+      </div>
+      <div class="story-foot">Task Manager · FastAPI</div>
+    </div>
+    <div class="auth-panel">
+      <div class="auth-box">
+        <h2 id="authTitle">欢迎回来</h2>
+        <p class="auth-lead" id="authLead">登录后继续你的今日计划。</p>
+        <div class="tabs" role="tablist">
+          <button class="tab active" id="loginTab" type="button">登录</button>
+          <button class="tab" id="registerTab" type="button">注册</button>
+        </div>
+        <form id="authForm">
+          <div class="field">
+            <label for="username">用户名</label>
+            <input id="username" name="username" autocomplete="username" required maxlength="50" placeholder="输入用户名">
+          </div>
+          <div class="field">
+            <label for="password">密码</label>
+            <input id="password" name="password" type="password" autocomplete="current-password" required placeholder="输入密码">
+          </div>
+          <button class="submit" id="authSubmit" type="submit">登录</button>
+          <p class="form-message" id="formMessage" role="alert"></p>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <section id="appView" class="app-shell hidden">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">✓</span>
+        <span>今日清单</span>
+      </div>
+      <nav class="app-nav" aria-label="主导航">
+        <button class="nav-button active" id="tasksNav" type="button">任务</button>
+        <button class="nav-button" id="meNav" type="button">我的</button>
+      </nav>
+      <div class="topbar-actions">
+        <div class="user-chip"><strong id="navUsername">—</strong><small>已连接 FastAPI</small></div>
+        <button class="icon-button" id="logoutButton" type="button" title="退出登录" aria-label="退出登录">
+          <span aria-hidden="true">↪</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="app-main" id="tasksPage">
+      <div class="page-heading">
+        <div>
+          <span class="eyebrow">My day</span>
+          <h1 id="greeting">你好</h1>
+          <p>从一件小事开始，让今天向前一点。</p>
+        </div>
+        <div class="date-card"><strong id="dateDay">—</strong><span id="dateText">—</span></div>
+      </div>
+
+      <div class="workspace">
+        <section class="task-panel" aria-labelledby="taskHeading">
+          <div class="task-compose">
+            <form class="filter-form" id="filterForm">
+              <div class="filter-segment" role="group" aria-label="任务状态筛选">
+                <button class="filter-status active" data-status="all" type="button">全部</button>
+                <button class="filter-status" data-status="open" type="button">未完成</button>
+                <button class="filter-status" data-status="completed" type="button">已完成</button>
+              </div>
+              <input id="filterTag" maxlength="20" aria-label="按标签筛选" placeholder="标签筛选">
+              <button class="filter-action" id="applyFilterButton" type="submit">筛选</button>
+              <button class="filter-action" id="clearFilterButton" type="button">清除</button>
+            </form>
+            <form class="task-inputs" id="taskForm">
+              <input id="taskTitle" maxlength="100" required aria-label="任务标题" placeholder="添加一项任务…">
+              <input id="taskTag" maxlength="20" aria-label="任务标签" placeholder="标签">
+              <button class="add-button" type="submit" title="添加任务" aria-label="添加任务">+</button>
+              <textarea id="taskDescription" maxlength="500" aria-label="任务描述" placeholder="描述"></textarea>
+              <p class="task-message" id="taskMessage" role="alert"></p>
+            </form>
+          </div>
+          <h2 id="taskHeading" class="hidden">任务列表</h2>
+          <ul class="task-list" id="taskList"></ul>
+          <div class="empty hidden" id="emptyState"><strong>今天还很轻松</strong>写下第一件准备完成的事。</div>
+        </section>
+
+        <aside class="side">
+          <section class="stats">
+            <h2>今日进度</h2>
+            <div class="progress" aria-label="完成进度"><div class="progress-bar" id="progressBar"></div></div>
+            <div class="stats-row"><span id="completedText">完成 0 项</span><span id="totalText">共 0 项</span></div>
+          </section>
+          <section class="profile">
+            <h2>账户</h2>
+            <dl>
+              <div><dt>用户名</dt><dd id="profileUsername">—</dd></div>
+              <div><dt>邮箱</dt><dd id="profileEmail">未填写</dd></div>
+              <div><dt>简介</dt><dd id="profileBio">未填写</dd></div>
+            </dl>
+          </section>
+        </aside>
+      </div>
+    </main>
+
+    <main class="app-main hidden" id="mePage">
+      <div class="page-heading me-heading">
+        <div>
+          <span class="eyebrow">Account</span>
+          <h1>我的账户</h1>
+          <p>查看和更新当前登录账户的信息。</p>
+        </div>
+        <button class="refresh-button" id="refreshMeButton" type="button">
+          <span aria-hidden="true">↻</span><span>刷新</span>
+        </button>
+      </div>
+
+      <div class="me-layout">
+        <section class="identity-block" aria-label="账户概览">
+          <div class="avatar" id="meAvatar" aria-hidden="true">—</div>
+          <h2 id="meUsername">—</h2>
+          <p id="meEmailSummary">未填写邮箱</p>
+        </section>
+
+        <section class="account-panel" aria-labelledby="accountInfoHeading">
+          <div class="account-panel-head">
+            <h2 id="accountInfoHeading">基本信息</h2>
+            <span class="status-badge">已登录</span>
+          </div>
+          <dl class="account-rows">
+            <div class="account-row"><dt>用户名</dt><dd id="meDetailUsername">—</dd></div>
+          </dl>
+          <form class="profile-form" id="profileForm">
+            <label class="profile-field" for="profileEmailInput">
+              <span>邮箱</span>
+              <input id="profileEmailInput" name="email" type="email" autocomplete="email" maxlength="50" placeholder="name@example.com">
+            </label>
+            <label class="profile-field" for="profileBioInput">
+              <span>简介</span>
+              <textarea id="profileBioInput" name="bio" maxlength="100" placeholder="写一点关于你自己"></textarea>
+            </label>
+            <div class="profile-actions">
+              <p class="me-message hidden" id="meMessage" role="alert"></p>
+              <button class="submit" id="profileSubmit" type="submit">保存</button>
+            </div>
+          </form>
+        </section>
+      </div>
+    </main>
+  </section>
+  <div class="toast" id="toast" role="status"></div>
+
+  <script>
+    const state = {
+      mode: "login",
+      token: localStorage.getItem("tm_token"),
+      user: JSON.parse(localStorage.getItem("tm_user") || "null"),
+      tasks: [],
+      taskFilters: {
+        status: "all",
+        tag: ""
+      }
+    };
+    let refreshRequest = null;
+
+    const $ = (id) => document.getElementById(id);
+    const authView = $("authView");
+    const appView = $("appView");
+
+    function setMode(mode) {
+      state.mode = mode;
+      const registering = mode === "register";
+      $("loginTab").classList.toggle("active", !registering);
+      $("registerTab").classList.toggle("active", registering);
+      $("authTitle").textContent = registering ? "创建账户" : "欢迎回来";
+      $("authLead").textContent = registering ? "建立你的清单，从今天开始。" : "登录后继续你的今日计划。";
+      $("authSubmit").textContent = registering ? "注册并进入" : "登录";
+      $("password").autocomplete = registering ? "new-password" : "current-password";
+      $("formMessage").textContent = "";
+    }
+
+    function persistAuth(authData) {
+      const accessToken = authData?.accessToken || authData?.access_token;
+
+      if (!accessToken) throw new Error("认证响应缺少 access token");
+
+      state.token = accessToken;
+      localStorage.setItem("tm_token", accessToken);
+
+      if (authData?.user) {
+        state.user = authData.user;
+        localStorage.setItem("tm_user", JSON.stringify(state.user));
+      }
+    }
+
+    async function refreshAccessToken() {
+      if (refreshRequest) return refreshRequest;
+
+      refreshRequest = (async () => {
+        let response;
+        try {
+          response = await fetch("/api/auth/refresh", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include"
+          });
+        } catch {
+          throw new Error("无法连接后端，请确认 FastAPI 已在 8000 端口启动");
+        }
+
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload.success === false) {
+          const error = new Error(payload.message || payload.detail || "登录已过期");
+          error.status = response.status;
+          throw error;
+        }
+
+        persistAuth(payload.data);
+        return state.token;
+      })();
+
+      try {
+        return await refreshRequest;
+      } finally {
+        refreshRequest = null;
+      }
+    }
+
+    async function api(path, options = {}, allowRefresh = true) {
+      const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+      if (state.token) headers.Authorization = `Bearer ${state.token}`;
+
+      let response;
+      try {
+        response = await fetch(path, {
+          ...options,
+          headers,
+          credentials: options.credentials || "include"
+        });
+      } catch {
+        throw new Error("无法连接后端，请确认 FastAPI 已在 8000 端口启动");
+      }
+
+      const payload = await response.json().catch(() => ({}));
+      if (
+        response.status === 401 &&
+        allowRefresh &&
+        path !== "/api/auth/refresh" &&
+        state.token
+      ) {
+        try {
+          await refreshAccessToken();
+          return api(path, options, false);
+        } catch {
+          // Preserve the original 401 so each view can handle session expiry consistently.
+        }
+      }
+
+      if (!response.ok || payload.success === false) {
+        const error = new Error(payload.message || payload.detail || `请求失败 (${response.status})`);
+        error.status = response.status;
+        throw error;
+      }
+
+      return payload;
+    }
+
+    function showToast(message) {
+      const toast = $("toast");
+      toast.textContent = message;
+      toast.classList.add("show");
+      clearTimeout(showToast.timer);
+      showToast.timer = setTimeout(() => toast.classList.remove("show"), 1800);
+    }
+
+    function getServerTaskId(source) {
+      const rawId = source?.taskId ?? source?.task_id ?? source?.serverId ?? source?.server_id;
+      if (rawId !== undefined && rawId !== null && rawId !== "") return String(rawId);
+      if (Number.isInteger(source?.id) || /^\d+$/.test(String(source?.id || ""))) return String(source.id);
+      return null;
+    }
+
+    function normalizeTask(apiTask, fallback = {}, existing = {}) {
+      const source = { ...fallback, ...(apiTask || {}) };
+      const serverId = getServerTaskId(source) || existing.serverId || null;
+      return {
+        id: existing.id || source.localId || source.local_id || source.id || (serverId ? `server-${serverId}` : crypto.randomUUID()),
+        serverId,
+        title: source.title || existing.title || "",
+        description: source.description || "",
+        tag: source.tag || "",
+        completed: "completed" in source ? Boolean(source.completed) : Boolean(existing.completed),
+        pending: false
+      };
+    }
+
+    function taskKey() {
+      return `tm_tasks_${state.user?.username || "guest"}`;
+    }
+
+    function readCachedTasks() {
+      try {
+        const tasks = JSON.parse(localStorage.getItem(taskKey()) || "[]");
+        return Array.isArray(tasks) ? tasks : [];
+      } catch {
+        return [];
+      }
+    }
+
+      function normalizeTasks(tasks) {
+        return tasks
+          .filter((task) => task && task.title)
+          .map((task) => normalizeTask(task, {}, { pending: false }));
+      }
+
+      function taskMatchesFilters(task) {
+        if (state.taskFilters.status === "completed" && !task.completed) return false;
+        if (state.taskFilters.status === "open" && task.completed) return false;
+        if (state.taskFilters.tag && task.tag !== state.taskFilters.tag) return false;
+        return true;
+      }
+
+      function isUnfilteredTaskView() {
+        return state.taskFilters.status === "all" && !state.taskFilters.tag;
+      }
+
+      function taskListPath() {
+        const params = new URLSearchParams();
+        if (state.taskFilters.status === "completed") params.set("completed", "true");
+        if (state.taskFilters.status === "open") params.set("completed", "false");
+        if (state.taskFilters.tag) params.set("tag", state.taskFilters.tag);
+        const query = params.toString();
+        return query ? `/api/task/?${query}` : "/api/task/";
+      }
+
+      function writeCachedTasks(tasks) {
+        const persistedTasks = tasks.map(({ pending, ...task }) => task);
+        localStorage.setItem(taskKey(), JSON.stringify(persistedTasks));
+      }
+
+      function upsertCachedTask(nextTask) {
+        const cachedTasks = normalizeTasks(readCachedTasks());
+        const index = cachedTasks.findIndex((task) => (
+          nextTask.serverId ? task.serverId === nextTask.serverId : task.id === nextTask.id
+        ));
+        if (index === -1) {
+          cachedTasks.unshift(nextTask);
+        } else {
+          cachedTasks[index] = { ...cachedTasks[index], ...nextTask, pending: false };
+        }
+        writeCachedTasks(cachedTasks);
+      }
+
+      function removeCachedTask(removedTask) {
+        const cachedTasks = normalizeTasks(readCachedTasks()).filter((task) => (
+          removedTask.serverId ? task.serverId !== removedTask.serverId : task.id !== removedTask.id
+        ));
+        writeCachedTasks(cachedTasks);
+      }
+
+      function mergeCachedTasks(nextTasks) {
+        if (isUnfilteredTaskView()) {
+          writeCachedTasks(nextTasks);
+          return;
+        }
+        nextTasks.forEach(upsertCachedTask);
+      }
+
+      async function loadTasks() {
+        $("taskMessage").textContent = "";
+        state.tasks = normalizeTasks(readCachedTasks()).filter(taskMatchesFilters);
+        renderTasks();
+
+        try {
+          const response = await api(taskListPath());
+          state.tasks = normalizeTasks(Array.isArray(response.data) ? response.data : []);
+          mergeCachedTasks(state.tasks);
+          renderTasks();
+        } catch (error) {
+          if (error.status === 401) {
+            logout("登录已过期，请重新登录");
+          return;
+        }
+        $("taskMessage").textContent = `任务列表加载失败：${error.message}`;
+      }
+      }
+
+    function renderTaskFilters() {
+      document.querySelectorAll(".filter-status").forEach((button) => {
+        button.classList.toggle("active", button.dataset.status === state.taskFilters.status);
+        });
+        $("filterTag").value = state.taskFilters.tag;
+      }
+
+    function showTaskError(error) {
+      if (error.status === 401) {
+        logout("登录已过期，请重新登录");
+        return;
+      }
+      $("taskMessage").textContent = error.message;
+    }
+
+      function replaceTask(currentTask, nextTask) {
+        const index = state.tasks.findIndex((task) => task.id === currentTask.id);
+        if (index === -1) return;
+        const mergedTask = { ...nextTask, id: currentTask.id, serverId: nextTask.serverId || currentTask.serverId };
+        upsertCachedTask(mergedTask);
+        if (taskMatchesFilters(mergedTask)) {
+          state.tasks[index] = mergedTask;
+        } else {
+          state.tasks.splice(index, 1);
+        }
+        renderTasks();
+      }
+
+    async function toggleTaskCompletion(task) {
+      const completed = !task.completed;
+      $("taskMessage").textContent = "";
+
+        if (!task.serverId) {
+          task.completed = completed;
+          upsertCachedTask(task);
+          state.tasks = state.tasks.filter(taskMatchesFilters);
+          renderTasks();
+          showToast("状态已更新");
+          return;
+        }
+
+      task.pending = true;
+      renderTasks();
+
+      try {
+          const response = await api("/api/task/complete", {
+            method: "PATCH",
+            body: JSON.stringify({ task_id: Number(task.serverId), completed })
+          });
+          replaceTask(task, normalizeTask(response.data, { ...task, completed }, task));
+          showToast(completed ? "任务已完成" : "任务已恢复");
+      } catch (error) {
+        task.pending = false;
+        renderTasks();
+        showTaskError(error);
+      }
+    }
+
+    async function removeTask(task) {
+      $("taskMessage").textContent = "";
+
+        if (!task.serverId) {
+          state.tasks = state.tasks.filter((candidate) => candidate.id !== task.id);
+          removeCachedTask(task);
+          renderTasks();
+          showToast("已从列表移除");
+          return;
+        }
+
+      task.pending = true;
+      renderTasks();
+
+      try {
+          await api(`/api/task/${task.serverId}`, { method: "DELETE" });
+          state.tasks = state.tasks.filter((candidate) => candidate.id !== task.id);
+          removeCachedTask(task);
+          renderTasks();
+          showToast("任务已删除");
+      } catch (error) {
+        task.pending = false;
+        renderTasks();
+        showTaskError(error);
+      }
+    }
+
+    function renderTasks() {
+      const list = $("taskList");
+      list.replaceChildren();
+
+      state.tasks.forEach((task) => {
+        const item = document.createElement("li");
+        item.className = `task-item${task.completed ? " completed" : ""}${task.pending ? " pending" : ""}`;
+
+        const check = document.createElement("button");
+        check.className = `check${task.completed ? " done" : ""}`;
+        check.type = "button";
+        check.disabled = Boolean(task.pending);
+        check.setAttribute("aria-label", task.completed ? "标为未完成" : "标为完成");
+        check.textContent = task.completed ? "✓" : "";
+        check.addEventListener("click", () => toggleTaskCompletion(task));
+
+        const copy = document.createElement("div");
+        copy.className = "task-copy";
+
+        const title = document.createElement("strong");
+        title.textContent = task.title;
+        copy.append(title);
+
+        if (task.description) {
+          const description = document.createElement("small");
+          description.textContent = task.description;
+          copy.append(description);
+        }
+
+        const meta = document.createElement("div");
+        meta.className = "task-meta";
+
+        if (task.tag) {
+          const tag = document.createElement("span");
+          tag.className = "task-tag";
+          tag.textContent = task.tag;
+          meta.append(tag);
+        }
+
+        const status = document.createElement("small");
+        status.textContent = task.pending ? "同步中" : task.completed ? "已完成" : "待完成";
+        meta.append(status);
+        copy.append(meta);
+
+        const remove = document.createElement("button");
+        remove.className = "icon-button delete-button";
+        remove.type = "button";
+        remove.disabled = Boolean(task.pending);
+        remove.title = "删除任务";
+        remove.setAttribute("aria-label", `删除任务：${task.title}`);
+        remove.textContent = "×";
+        remove.addEventListener("click", () => removeTask(task));
+
+        item.append(check, copy, remove);
+        list.append(item);
+      });
+
+      const completed = state.tasks.filter((task) => task.completed).length;
+      const total = state.tasks.length;
+      $("emptyState").classList.toggle("hidden", total !== 0);
+      $("completedText").textContent = `完成 ${completed} 项`;
+      $("totalText").textContent = `共 ${total} 项`;
+      $("progressBar").style.width = `${total ? Math.round((completed / total) * 100) : 0}%`;
+    }
+
+    function renderUser() {
+      const username = state.user?.username || "用户";
+      const email = state.user?.email || "未填写";
+      const bio = state.user?.bio || "未填写";
+      $("navUsername").textContent = username;
+      $("greeting").textContent = `你好，${username}`;
+      $("profileUsername").textContent = username;
+      $("profileEmail").textContent = email;
+      $("profileBio").textContent = bio;
+      $("meAvatar").textContent = username.slice(0, 1).toUpperCase();
+      $("meUsername").textContent = username;
+      $("meEmailSummary").textContent = state.user?.email || "未填写邮箱";
+      $("meDetailUsername").textContent = username;
+      $("profileEmailInput").value = state.user?.email || "";
+      $("profileBioInput").value = state.user?.bio || "";
+    }
+
+      function showApp() {
+        authView.classList.add("hidden");
+        appView.classList.remove("hidden");
+        renderUser();
+        renderTaskFilters();
+
+        const now = new Date();
+      $("dateDay").textContent = now.getDate();
+      $("dateText").textContent = new Intl.DateTimeFormat("zh-CN", { month: "long", weekday: "short" }).format(now);
+      loadTasks();
+      showPage(location.hash === "#/me" ? "me" : "tasks", false);
+    }
+
+    function showPage(page, updateHash = true) {
+      const showingMe = page === "me";
+      $("tasksPage").classList.toggle("hidden", showingMe);
+      $("mePage").classList.toggle("hidden", !showingMe);
+      $("tasksNav").classList.toggle("active", !showingMe);
+      $("meNav").classList.toggle("active", showingMe);
+      if (updateHash) location.hash = showingMe ? "#/me" : "#/tasks";
+      if (showingMe) loadMe();
+    }
+
+    async function loadMe() {
+      const button = $("refreshMeButton");
+      const message = $("meMessage");
+      button.disabled = true;
+      message.classList.add("hidden");
+
+      try {
+        const response = await api("/api/user/me");
+        state.user = response.data;
+        localStorage.setItem("tm_user", JSON.stringify(state.user));
+        renderUser();
+      } catch (error) {
+        if (error.status === 401) {
+          logout("登录已过期，请重新登录");
+          return;
+        }
+        message.textContent = error.message;
+        message.classList.remove("hidden");
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    function showAuth(message = "") {
+      appView.classList.add("hidden");
+      authView.classList.remove("hidden");
+      $("formMessage").textContent = message;
+    }
+
+    function clearAuthState(message = "") {
+      state.token = null;
+      state.user = null;
+      localStorage.removeItem("tm_token");
+      localStorage.removeItem("tm_refresh_token");
+      localStorage.removeItem("tm_user");
+      showAuth(message);
+    }
+
+    async function logout(message = "") {
+      const logoutRequest = api(
+        "/api/auth/logout",
+        { method: "POST" },
+        false
+      );
+
+      clearAuthState(message);
+
+      try {
+        await logoutRequest;
+      } catch (error) {
+        if (!message && error.status !== 401) {
+          $("formMessage").textContent = "本地已退出，但服务器会话清理失败，请确认后端可用";
+        }
+      }
+    }
+
+    async function restoreSession() {
+      if (!state.token) {
+        const hadLocalSession = Boolean(state.user);
+
+        try {
+          await refreshAccessToken();
+        } catch {
+          clearAuthState(hadLocalSession ? "登录已过期，请重新登录" : "");
+          return;
+        }
+      }
+
+      try {
+        const response = await api("/api/user/me");
+        state.user = response.data;
+        localStorage.setItem("tm_user", JSON.stringify(state.user));
+        showApp();
+      } catch {
+        logout("登录已过期，请重新登录");
+      }
+    }
+
+    $("loginTab").addEventListener("click", () => setMode("login"));
+    $("registerTab").addEventListener("click", () => setMode("register"));
+      $("tasksNav").addEventListener("click", () => showPage("tasks"));
+      $("meNav").addEventListener("click", () => showPage("me"));
+      $("refreshMeButton").addEventListener("click", loadMe);
+      $("logoutButton").addEventListener("click", () => logout());
+      document.querySelectorAll(".filter-status").forEach((button) => {
+        button.addEventListener("click", () => {
+          state.taskFilters.status = button.dataset.status;
+          state.taskFilters.tag = $("filterTag").value.trim();
+          renderTaskFilters();
+          loadTasks();
+        });
+      });
+      $("filterForm").addEventListener("submit", (event) => {
+        event.preventDefault();
+        state.taskFilters.tag = $("filterTag").value.trim();
+        renderTaskFilters();
+        loadTasks();
+      });
+      $("clearFilterButton").addEventListener("click", () => {
+        state.taskFilters.status = "all";
+        state.taskFilters.tag = "";
+        renderTaskFilters();
+        loadTasks();
+      });
+
+    window.addEventListener("hashchange", () => {
+      if (!state.token || appView.classList.contains("hidden")) return;
+      showPage(location.hash === "#/me" ? "me" : "tasks", false);
+    });
+
+    $("authForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = $("authSubmit");
+      button.disabled = true;
+      $("formMessage").textContent = "";
+
+      const body = {
+        username: $("username").value.trim(),
+        password: $("password").value
+      };
+
+      try {
+        const response = await api(
+          `/api/auth/${state.mode}`,
+          { method: "POST", body: JSON.stringify(body) },
+          false
+        );
+        persistAuth(response.data);
+        showApp();
+      } catch (error) {
+        $("formMessage").textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    $("profileForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = $("profileSubmit");
+      const message = $("meMessage");
+      const email = $("profileEmailInput").value.trim();
+      const bio = $("profileBioInput").value.trim();
+      const body = {};
+
+      if (email !== (state.user?.email || "")) body.email = email;
+      if (bio !== (state.user?.bio || "")) body.bio = bio;
+
+      if (!Object.keys(body).length) {
+        showToast("资料未改变");
+        return;
+      }
+
+      button.disabled = true;
+      message.classList.add("hidden");
+
+      try {
+        const response = await api("/api/user/me", { method: "PATCH", body: JSON.stringify(body) });
+        state.user = response.data;
+        localStorage.setItem("tm_user", JSON.stringify(state.user));
+        renderUser();
+        showToast("资料已保存");
+      } catch (error) {
+        if (error.status === 401) {
+          logout("登录已过期，请重新登录");
+          return;
+        }
+        message.textContent = error.message;
+        message.classList.remove("hidden");
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    $("taskForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const titleInput = $("taskTitle");
+      const tagInput = $("taskTag");
+      const descriptionInput = $("taskDescription");
+      const button = event.currentTarget.querySelector("button[type='submit']");
+      const message = $("taskMessage");
+      const title = titleInput.value.trim();
+      const tag = tagInput.value.trim();
+      const description = descriptionInput.value.trim();
+
+      if (!title) return;
+
+      const body = { title };
+      if (tag) body.tag = tag;
+      if (description) body.description = description;
+
+      button.disabled = true;
+      message.textContent = "";
+
+      try {
+          const response = await api("/api/task/create", { method: "POST", body: JSON.stringify(body) });
+          const createdTask = normalizeTask(response.data, body);
+          upsertCachedTask(createdTask);
+          if (taskMatchesFilters(createdTask)) state.tasks.unshift(createdTask);
+          titleInput.value = "";
+          tagInput.value = "";
+          descriptionInput.value = "";
+          renderTasks();
+          showToast("任务已创建");
+        titleInput.focus();
+      } catch (error) {
+        if (error.status === 401) {
+          logout("登录已过期，请重新登录");
+          return;
+        }
+        message.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    restoreSession();
+  </script>
+</body>
+</html>
