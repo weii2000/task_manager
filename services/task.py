@@ -20,7 +20,7 @@ async def create_task_for_user(task_create: TaskCreate, user_id: int, db: AsyncS
     return TaskRead.model_validate(task)
 
 
-async def complete_task(task_complete_update: TaskCompleteUpdate, user_id: int, db: AsyncSession):
+async def complete_task_for_user(task_complete_update: TaskCompleteUpdate, user_id: int, db: AsyncSession):
     async with db.begin():
         task = await get_task_by_task_id_user_id(task_complete_update.task_id, db, user_id)
         if not task:
@@ -31,7 +31,7 @@ async def complete_task(task_complete_update: TaskCompleteUpdate, user_id: int, 
     return TaskRead.model_validate(task)
 
 
-async def delete_task(task_id: int, user_id: int, db: AsyncSession):
+async def delete_task_for_user(task_id: int, user_id: int, db: AsyncSession):
     async with db.begin():
         task = await get_task_by_task_id_user_id(task_id, db, user_id)
         if not task:

@@ -28,7 +28,7 @@ def test_create_task_success(
     )
 
     response = client.post(
-        "/api/task/create",
+        "/api/task/",
         json=request_body,
     )
 
@@ -58,7 +58,7 @@ def test_create_task_without_title_returns_422(
     )
 
     response = client.post(
-        "/api/task/create",
+        "/api/task/",
         json={"tag": "study"},
     )
 
@@ -91,7 +91,7 @@ def test_complete_task_success(
     mock_service = AsyncMock(return_value=fake_task)
 
     monkeypatch.setattr(
-        "router.task.complete_task",
+        "router.task.complete_task_for_user",
         mock_service,
     )
 
@@ -120,7 +120,7 @@ def test_complete_missing_task_returns_404(
     )
 
     monkeypatch.setattr(
-        "router.task.complete_task",
+        "router.task.complete_task_for_user",
         mock_service,
     )
 
@@ -149,7 +149,7 @@ def test_delete_task_success(
     mock_service = AsyncMock(return_value=None)
 
     monkeypatch.setattr(
-        "router.task.delete_task",
+        "router.task.delete_task_for_user",
         mock_service,
     )
 
@@ -176,7 +176,7 @@ def test_delete_task_with_invalid_id_returns_422(
     mock_service = AsyncMock()
 
     monkeypatch.setattr(
-        "router.task.delete_task",
+        "router.task.delete_task_for_user",
         mock_service,
     )
 

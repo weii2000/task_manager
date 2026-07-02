@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TaskRead(BaseModel):
@@ -14,9 +14,24 @@ class TaskRead(BaseModel):
 
 
 class TaskCreate(BaseModel):
-    title: str
-    description: str | None = None
-    tag: str | None = None
+    title: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description="任务标题",
+    )
+
+    description: str | None = Field(
+        default=None,
+        max_length=500,
+        description="任务描述",
+    )
+
+    tag: str | None = Field(
+        default=None,
+        max_length=50,
+        description="任务标签",
+    )
 
 
 class TaskCompleteUpdate(BaseModel):
@@ -25,11 +40,21 @@ class TaskCompleteUpdate(BaseModel):
 
 
 class TaskInfoUpdate(BaseModel):
-    title: str | None = None
-    description: str | None = None
-    tag: str | None = None
+    title: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description="任务标题",
+    )
 
+    description: str | None = Field(
+        default=None,
+        max_length=500,
+        description="任务描述",
+    )
 
-class TaskFilter(BaseModel):
-    completed: bool | None = None
-    tag: str | None = None
+    tag: str | None = Field(
+        default=None,
+        max_length=50,
+        description="任务标签",
+    )

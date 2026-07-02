@@ -5,15 +5,15 @@ from database.session import get_db
 from dependencies.auth import get_current_user
 from models.user import User
 from schemas.response import ApiResponse
-from schemas.task import TaskCompleteUpdate, TaskCreate, TaskFilter, TaskRead
-from services.task import complete_task, create_task_for_user, delete_task, get_tasks_for_user
+from schemas.task import TaskCompleteUpdate, TaskCreate, TaskRead
+from services.task import complete_task_for_user, create_task_for_user, delete_task_for_user, get_tasks_for_user
 
 
 router = APIRouter(prefix="/api/task", tags=["task"])
 
 
-@router.post("/create", response_model=ApiResponse[TaskRead])
-async def create_task(
+@router.post("/", response_model=ApiResponse[TaskRead])
+async def create_task_for_user_api(
     task_create: TaskCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -23,22 +23,22 @@ async def create_task(
 
 
 @router.patch("/complete", response_model=ApiResponse[TaskRead])
-async def complete_task_for_user(
+async def complete_task_for_user_api(
     task_complete_update: TaskCompleteUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    data = await complete_task(task_complete_update, current_user.user_id, db)
+    data = await complete_task_for_user(task_complete_update, current_user.user_id, db)
     return ApiResponse[TaskRead](message="任务完成状态已更新", data=data)
 
 
 @router.delete("/{task_id}", response_model=ApiResponse)
-async def delete_task_for_user(
+async def delete_task_for_user_api(
     task_id: int,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await delete_task(task_id, current_user.user_id, db)
+    await delete_task_for_user(task_id, current_user.user_id, db)
     return ApiResponse(message="任务删除成功")
 
 

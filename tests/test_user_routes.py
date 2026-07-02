@@ -36,7 +36,7 @@ def test_update_me_success(
     mock_service = AsyncMock(return_value=updated_user)
 
     monkeypatch.setattr(
-        "router.user.update_user_info",
+        "router.user.update_my_info",
         mock_service,
     )
 
@@ -70,7 +70,7 @@ def test_update_me_with_empty_body_returns_400(
     )
 
     monkeypatch.setattr(
-        "router.user.update_user_info",
+        "router.user.update_my_info",
         mock_service,
     )
 

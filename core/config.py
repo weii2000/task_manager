@@ -1,10 +1,11 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "FastAPI Project"
-    DATABASE_URL: str = "your-database-url"
-    SECRET_KEY: str = "your-secret-key"
+    DATABASE_URL: str = Field(...)
+    SECRET_KEY: str = Field(...)
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
@@ -13,4 +14,4 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
     )
 
-settings = Settings()
+settings = Settings() # type: ignore[call-arg]

@@ -23,7 +23,7 @@ def test_register_success(
     monkeypatch,
 ):
     request_body = {
-        "username": "new-user",
+        "username": "new_user",
         "password": "password123",
     }
     auth_data = make_auth_response(fake_user)
@@ -68,7 +68,7 @@ def test_register_without_password_returns_422(
 
     response = client.post(
         "/api/auth/register",
-        json={"username": "new-user"},
+        json={"username": "new_user"},
     )
 
     assert response.status_code == 422

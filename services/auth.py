@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.security import create_access_token, create_refresh_token, decode_token, get_hashed_password, hash_token, verify
 from crud.auth import create_refresh_token_record, get_refresh_token_by_token_hash, revoke_token_by_token_hash
@@ -11,20 +12,23 @@ from schemas.user import UserRead
 
 
 async def register(register_request: RegisterRequest, db: AsyncSession) -> tuple[AuthResponse, str]:
-    async with db.begin():
-        user = await get_user_by_username(register_request.username, db)
-        if user:
-            raise UsernameAlreadyExistsError()
-        
-        hashed_password = get_hashed_password(register_request.password)
-        user = await create_user(register_request.username, hashed_password, db)
+    try:
+        async with db.begin():
+            user = await get_user_by_username(register_request.username, db)
+            if user:
+                raise UsernameAlreadyExistsError()
+            
+            hashed_password = get_hashed_password(register_request.password)
+            user = await create_user(register_request.username, hashed_password, db)
 
-        access_token = create_access_token(str(user.user_id))
-        refresh_token, expires_at = create_refresh_token(str(user.user_id))
-        token_hash = hash_token(refresh_token)
-        await create_refresh_token_record(token_hash, expires_at, user.user_id, db)
-        await db.refresh(user)
-    
+            access_token = create_access_token(str(user.user_id))
+            refresh_token, expires_at = create_refresh_token(str(user.user_id))
+            token_hash = hash_token(refresh_token)
+            await create_refresh_token_record(token_hash, expires_at, user.user_id, db)
+            await db.refresh(user)
+    except IntegrityError as exc:
+        raise UsernameAlreadyExistsError() from exc
+
     return AuthResponse(access_token=access_token, user=UserRead.model_validate(user)), refresh_token # type: ignore
 
 

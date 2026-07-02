@@ -1,14 +1,14 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, EmailStr
 
 
 class UserInfoUpdate(BaseModel):
-    email: str | None = None
-    bio: str | None = None
+    email: EmailStr | None = Field(default=None, description="邮箱地址",)
+    bio: str | None = Field(default=None, max_length=500, description="个人简介",)
 
 
 class UserRead(BaseModel):
     username: str
-    email: str | None = None
-    bio: str | None = None
+    email: EmailStr | None = Field(default=None, description="邮箱地址",)
+    bio: str | None = Field(default=None, description="个人简介",)
 
     model_config = ConfigDict(from_attributes=True)
