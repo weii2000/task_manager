@@ -43,7 +43,7 @@ async def delete_task_for_user(
 
 
 @router.get("/", response_model=ApiResponse[list[TaskRead]])
-async def tasks(
+async def get_tasks_for_user_api(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     completed: bool | None = None,
