@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.datetime_utils import utc_now_naive
 from models.auth import RefreshToken
 
 
@@ -31,7 +32,7 @@ async def revoke_token_by_token_hash(token_hash: str, db: AsyncSession) -> Refre
     if refresh_token.revoked_at is not None:
         return None
     
-    refresh_token.revoked_at = datetime.now(timezone.utc)
+    refresh_token.revoked_at = utc_now_naive()
     await db.flush()
     await db.refresh(refresh_token)
     

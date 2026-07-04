@@ -3,23 +3,13 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from core.datetime_utils import to_utc_aware, to_utc_naive
-from models.enums import CreationSource, TaskPriority, TaskStatus
+from models.enums import CreationSource, ProjectStatus, ProjectSystemType
 
 
-class TaskCreate(BaseModel):
-    project_id: int | None = Field(default=None, gt=0)
-    parent_task_id: int | None = Field(default=None, gt=0)
-
+class ProjectCreate(BaseModel):
     title: str = Field(min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=5000)
-    acceptance_criteria: str | None = Field(
-        default=None,
-        max_length=5000,
-    )
-
-    sort_order: int = Field(default=0, ge=0)
-    priority: TaskPriority = TaskPriority.LOW
-
+    goal: str | None = Field(default=None, max_length=2000)
     start_time: datetime | None = None
     due_time: datetime | None = None
 
@@ -30,7 +20,7 @@ class TaskCreate(BaseModel):
     def validate_title(cls, value: str) -> str:
         value = value.strip()
         if not value:
-            raise ValueError("任务标题不能为空")
+            raise ValueError("项目标题不能为空")
         return value
 
     @field_validator("start_time", "due_time")
@@ -51,17 +41,10 @@ class TaskCreate(BaseModel):
         return self
 
 
-class TaskUpdate(BaseModel):
+class ProjectUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=5000)
-    acceptance_criteria: str | None = Field(
-        default=None,
-        max_length=5000,
-    )
-
-    sort_order: int | None = Field(default=None, ge=0)
-    priority: TaskPriority | None = None
-
+    goal: str | None = Field(default=None, max_length=2000)
     start_time: datetime | None = None
     due_time: datetime | None = None
 
@@ -71,28 +54,11 @@ class TaskUpdate(BaseModel):
     @classmethod
     def validate_title(cls, value: str | None) -> str:
         if value is None:
-            raise ValueError("任务标题不能设置为空")
+            raise ValueError("项目标题不能设置为空")
 
         value = value.strip()
         if not value:
-            raise ValueError("任务标题不能为空")
-        return value
-
-    @field_validator("sort_order")
-    @classmethod
-    def validate_sort_order(cls, value: int | None) -> int:
-        if value is None:
-            raise ValueError("任务顺序不能设置为空")
-        return value
-
-    @field_validator("priority")
-    @classmethod
-    def validate_priority(
-        cls,
-        value: TaskPriority | None,
-    ) -> TaskPriority:
-        if value is None:
-            raise ValueError("任务优先级不能设置为空")
+            raise ValueError("项目标题不能为空")
         return value
 
     @field_validator("start_time", "due_time")
@@ -113,26 +79,21 @@ class TaskUpdate(BaseModel):
         return self
 
 
-class TaskStatusUpdate(BaseModel):
-    status: TaskStatus
+class ProjectStatusUpdate(BaseModel):
+    status: ProjectStatus
 
     model_config = ConfigDict(extra="forbid")
 
 
-class TaskRead(BaseModel):
-    task_id: int
+class ProjectRead(BaseModel):
     project_id: int
-    parent_task_id: int | None
-
+    owner_user_id: int
     title: str
     description: str | None
-    acceptance_criteria: str | None
-
-    sort_order: int
-    status: TaskStatus
-    priority: TaskPriority
+    goal: str | None
+    status: ProjectStatus
     creation_source: CreationSource
-
+    system_type: ProjectSystemType | None
     start_time: datetime | None
     due_time: datetime | None
     completed_time: datetime | None

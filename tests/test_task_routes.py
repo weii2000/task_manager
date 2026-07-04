@@ -1,44 +1,37 @@
 from unittest.mock import AsyncMock
 
 from exceptions.task import TaskNotFoundError
-from schemas.task import TaskCompleteUpdate, TaskCreate, TaskRead
+from models.enums import TaskStatus
+from schemas.task import TaskCreate, TaskStatusUpdate, TaskUpdate
 
 
 def test_create_task_success(
     client,
     fake_user,
     fake_db,
+    fake_task_factory,
     monkeypatch,
 ):
     request_body = {
+        "project_id": 2,
         "title": "学习 pytest",
-        "description": "完成 task route tests",
-        "tag": "study",
+        "description": "重写 Task Router 测试",
     }
-    fake_task = TaskRead(
-        task_id=3,
-        completed=False,
-        **request_body,
-    )
-    mock_service = AsyncMock(return_value=fake_task)
-
+    task = fake_task_factory(task_id=3, project_id=2)
+    mock_service = AsyncMock(return_value=task)
     monkeypatch.setattr(
         "router.task.create_task_for_user",
         mock_service,
     )
 
-    response = client.post(
-        "/api/task/",
-        json=request_body,
-    )
+    response = client.post("/api/tasks", json=request_body)
 
-    assert response.status_code == 200
+    assert response.status_code == 201
     assert response.json() == {
         "success": True,
         "message": "任务创建成功",
-        "data": fake_task.model_dump(),
+        "data": task.model_dump(mode="json"),
     }
-
     mock_service.assert_awaited_once_with(
         TaskCreate(**request_body),
         fake_user.user_id,
@@ -46,197 +39,187 @@ def test_create_task_success(
     )
 
 
-def test_create_task_without_title_returns_422(
-    client,
-    monkeypatch,
-):
+def test_create_task_rejects_legacy_fields(client, monkeypatch):
     mock_service = AsyncMock()
-
     monkeypatch.setattr(
         "router.task.create_task_for_user",
         mock_service,
     )
 
     response = client.post(
-        "/api/task/",
-        json={"tag": "study"},
-    )
-
-    assert response.status_code == 422
-    assert response.json()["success"] is False
-    assert response.json()["message"] == "请求参数校验失败"
-    assert response.json()["data"][0]["field"] == "body.title"
-
-    # 校验失败发生在调用 service 之前
-    mock_service.assert_not_awaited()
-
-
-def test_complete_task_success(
-    client,
-    fake_user,
-    fake_db,
-    monkeypatch,
-):
-    request_body = {
-        "task_id": 4,
-        "completed": True,
-    }
-    fake_task = TaskRead(
-        task_id=4,
-        title="学习 pytest",
-        description=None,
-        completed=True,
-        tag="study",
-    )
-    mock_service = AsyncMock(return_value=fake_task)
-
-    monkeypatch.setattr(
-        "router.task.complete_task_for_user",
-        mock_service,
-    )
-
-    response = client.patch(
-        "/api/task/complete",
-        json=request_body,
-    )
-
-    assert response.status_code == 200
-    assert response.json()["message"] == "任务完成状态已更新"
-    assert response.json()["data"] == fake_task.model_dump()
-
-    mock_service.assert_awaited_once_with(
-        TaskCompleteUpdate(**request_body),
-        fake_user.user_id,
-        fake_db,
-    )
-
-
-def test_complete_missing_task_returns_404(
-    client,
-    monkeypatch,
-):
-    mock_service = AsyncMock(
-        side_effect=TaskNotFoundError(),
-    )
-
-    monkeypatch.setattr(
-        "router.task.complete_task_for_user",
-        mock_service,
-    )
-
-    response = client.patch(
-        "/api/task/complete",
+        "/api/tasks",
         json={
-            "task_id": 999,
-            "completed": True,
+            "title": "legacy",
+            "completed": False,
+            "tag": "old",
         },
     )
 
-    assert response.status_code == 404
-    assert response.json() == {
-        "success": False,
-        "message": "任务不存在",
-        "data": None,
-    }
-
-
-def test_delete_task_success(
-    client,
-    fake_user,
-    fake_db,
-    monkeypatch,
-):
-    mock_service = AsyncMock(return_value=None)
-
-    monkeypatch.setattr(
-        "router.task.delete_task_for_user",
-        mock_service,
-    )
-
-    response = client.delete("/api/task/5")
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "success": True,
-        "message": "任务删除成功",
-        "data": None,
-    }
-
-    mock_service.assert_awaited_once_with(
-        5,
-        fake_user.user_id,
-        fake_db,
-    )
-
-
-def test_delete_task_with_invalid_id_returns_422(
-    client,
-    monkeypatch,
-):
-    mock_service = AsyncMock()
-
-    monkeypatch.setattr(
-        "router.task.delete_task_for_user",
-        mock_service,
-    )
-
-    response = client.delete("/api/task/not-an-integer")
-
     assert response.status_code == 422
     assert response.json()["success"] is False
-    assert response.json()["message"] == "请求参数校验失败"
-
     mock_service.assert_not_awaited()
 
 
-def test_get_tasks_for_user_success(client, fake_user, fake_db, fake_task_factory, monkeypatch):
-    fake_tasks = [TaskRead.model_validate(fake_task_factory(task_id=1)), TaskRead.model_validate(fake_task_factory(task_id=2))]
-    mock_service = AsyncMock(return_value=fake_tasks)
-
+def test_get_tasks_passes_project_and_archive_filter(
+    client,
+    fake_user,
+    fake_db,
+    fake_task_factory,
+    monkeypatch,
+):
+    tasks = [
+        fake_task_factory(task_id=1, project_id=3),
+        fake_task_factory(task_id=2, project_id=3),
+    ]
+    mock_service = AsyncMock(return_value=tasks)
     monkeypatch.setattr(
-        "router.task.get_tasks_for_user",
-        mock_service,
-    )
-    response = client.get("/api/task/")
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "success": True,
-        "message": "任务列表获取成功",
-        "data": [task.model_dump() for task in fake_tasks],
-    }
-
-    mock_service.assert_awaited_once_with(
-        fake_user.user_id,
-        fake_db,
-        None,
-        None,
-    )
-
-
-def test_get_tasks_passes_filters_to_service(client, fake_user, fake_db, monkeypatch):
-    mock_service = AsyncMock(return_value=[])
-
-    monkeypatch.setattr(
-        "router.task.get_tasks_for_user",
+        "router.task.get_project_tasks_for_user",
         mock_service,
     )
 
     response = client.get(
-        "/api/task/",
-        params={
-            "completed": "true",
-            "tag": "study",
-        },
+        "/api/tasks",
+        params={"project_id": 3, "archived": "true"},
     )
 
     assert response.status_code == 200
-    assert response.json()["data"] == []
-
-    # 检查 FastAPI 是否把字符串 "true" 转换为 True
+    assert response.json()["data"] == [
+        task.model_dump(mode="json")
+        for task in tasks
+    ]
     mock_service.assert_awaited_once_with(
         fake_user.user_id,
         fake_db,
+        3,
         True,
-        "study",
+    )
+
+
+def test_get_task_success(
+    client,
+    fake_user,
+    fake_db,
+    fake_task_factory,
+    monkeypatch,
+):
+    task = fake_task_factory(task_id=4)
+    mock_service = AsyncMock(return_value=task)
+    monkeypatch.setattr(
+        "router.task.get_task_for_user",
+        mock_service,
+    )
+
+    response = client.get("/api/tasks/4")
+
+    assert response.status_code == 200
+    assert response.json()["data"] == task.model_dump(mode="json")
+    mock_service.assert_awaited_once_with(
+        4,
+        fake_user.user_id,
+        fake_db,
+    )
+
+
+def test_get_missing_task_returns_404(client, monkeypatch):
+    monkeypatch.setattr(
+        "router.task.get_task_for_user",
+        AsyncMock(side_effect=TaskNotFoundError()),
+    )
+
+    response = client.get("/api/tasks/999")
+
+    assert response.status_code == 404
+    assert response.json()["message"] == "任务不存在"
+
+
+def test_update_task_success(
+    client,
+    fake_user,
+    fake_db,
+    fake_task_factory,
+    monkeypatch,
+):
+    request_body = {
+        "title": "更新后的任务",
+        "priority": "high",
+    }
+    task = fake_task_factory(task_id=5)
+    mock_service = AsyncMock(return_value=task)
+    monkeypatch.setattr(
+        "router.task.update_task_for_user",
+        mock_service,
+    )
+
+    response = client.patch("/api/tasks/5", json=request_body)
+
+    assert response.status_code == 200
+    mock_service.assert_awaited_once_with(
+        5,
+        TaskUpdate(**request_body),
+        fake_user.user_id,
+        fake_db,
+    )
+
+
+def test_update_task_status_success(
+    client,
+    fake_user,
+    fake_db,
+    fake_task_factory,
+    monkeypatch,
+):
+    task = fake_task_factory(task_id=6, status=TaskStatus.DONE)
+    mock_service = AsyncMock(return_value=task)
+    monkeypatch.setattr(
+        "router.task.update_task_status_for_user",
+        mock_service,
+    )
+
+    response = client.patch(
+        "/api/tasks/6/status",
+        json={"status": "done"},
+    )
+
+    assert response.status_code == 200
+    mock_service.assert_awaited_once_with(
+        6,
+        TaskStatusUpdate(status=TaskStatus.DONE),
+        fake_user.user_id,
+        fake_db,
+    )
+
+
+def test_archive_and_restore_task(
+    client,
+    fake_user,
+    fake_db,
+    fake_task_factory,
+    monkeypatch,
+):
+    task = fake_task_factory(task_id=7)
+    archive_mock = AsyncMock(return_value=task)
+    restore_mock = AsyncMock(return_value=task)
+    monkeypatch.setattr(
+        "router.task.archive_task_for_user",
+        archive_mock,
+    )
+    monkeypatch.setattr(
+        "router.task.restore_task_for_user",
+        restore_mock,
+    )
+
+    archive_response = client.delete("/api/tasks/7")
+    restore_response = client.post("/api/tasks/7/restore")
+
+    assert archive_response.status_code == 200
+    assert restore_response.status_code == 200
+    archive_mock.assert_awaited_once_with(
+        7,
+        fake_user.user_id,
+        fake_db,
+    )
+    restore_mock.assert_awaited_once_with(
+        7,
+        fake_user.user_id,
+        fake_db,
     )

@@ -1,10 +1,20 @@
 import pytest
+from datetime import datetime
 from types import SimpleNamespace
 from fastapi.testclient import TestClient
 
 from main import app
 from database.session import get_db
 from dependencies.auth import get_current_user
+from models.enums import (
+    CreationSource,
+    ProjectStatus,
+    ProjectSystemType,
+    TaskPriority,
+    TaskStatus,
+)
+from schemas.project import ProjectRead
+from schemas.task import TaskRead
 
 
 @pytest.fixture
@@ -22,14 +32,60 @@ def fake_db():
     return object()
 
 
-def make_fake_task(task_id: int = 1, completed: bool = False, user_id: int = 1, tag: str = "random"):
-    return SimpleNamespace(
+def make_fake_project(
+    project_id: int = 1,
+    owner_user_id: int = 1,
+    status: ProjectStatus = ProjectStatus.ACTIVE,
+    system_type: ProjectSystemType | None = None,
+    archived_time: datetime | None = None,
+) -> ProjectRead:
+    return ProjectRead(
+        project_id=project_id,
+        owner_user_id=owner_user_id,
+        title=f"Project {project_id}",
+        description=None,
+        goal=None,
+        status=status,
+        creation_source=CreationSource.MANUAL,
+        system_type=system_type,
+        start_time=None,
+        due_time=None,
+        completed_time=None,
+        archived_time=archived_time,
+        created_time=datetime(2026, 7, 4, 10),
+        updated_time=datetime(2026, 7, 4, 10),
+    )
+
+
+@pytest.fixture
+def fake_project_factory():
+    return make_fake_project
+
+
+def make_fake_task(
+    task_id: int = 1,
+    project_id: int = 1,
+    parent_task_id: int | None = None,
+    status: TaskStatus = TaskStatus.TODO,
+    archived_time: datetime | None = None,
+) -> TaskRead:
+    return TaskRead(
         task_id=task_id,
-        title=f'fake task {task_id}',
-        description=f'This is fake task {task_id}',
-        tag=tag,
-        completed=completed,
-        user_id=user_id,
+        project_id=project_id,
+        parent_task_id=parent_task_id,
+        title=f"Task {task_id}",
+        description=f"Description {task_id}",
+        acceptance_criteria=None,
+        sort_order=0,
+        status=status,
+        priority=TaskPriority.LOW,
+        creation_source=CreationSource.MANUAL,
+        start_time=None,
+        due_time=None,
+        completed_time=None,
+        archived_time=archived_time,
+        created_time=datetime(2026, 7, 4, 10),
+        updated_time=datetime(2026, 7, 4, 10),
     )
 
 

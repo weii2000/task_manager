@@ -6,7 +6,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
 from database.session import async_engine
-from router import user, task, auth
+from router import auth, project, task, user
 from exceptions.base import AppError
 from exceptions.handlers import app_error_handler, http_exception_handler, validation_exception_handler, unexpected_exception_handler
 
@@ -41,4 +41,5 @@ app.add_exception_handler(
 
 app.include_router(auth.router)
 app.include_router(user.router)
+app.include_router(project.router)
 app.include_router(task.router)

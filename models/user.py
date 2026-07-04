@@ -14,5 +14,12 @@ class User(Base):
     email: Mapped[str | None] = mapped_column(String(50), nullable=True, unique=True)
     bio: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
-    tasks: Mapped[list["Task"]] = relationship("Task", back_populates="user") # type: ignore
-    refresh_tokens: Mapped[list["RefreshToken"]] = relationship("RefreshToken", back_populates="user") # type: ignore
+    projects: Mapped[list["Project"]] = relationship( # type: ignore
+        "Project",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+    )
+    refresh_tokens: Mapped[list["RefreshToken"]] = relationship( # type: ignore
+        "RefreshToken", 
+        back_populates="user"
+    )

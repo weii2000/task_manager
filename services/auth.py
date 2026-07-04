@@ -2,11 +2,14 @@ from datetime import datetime, timezone
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from core.datetime_utils import utc_now_naive
 from core.security import create_access_token, create_refresh_token, decode_token, get_hashed_password, hash_token, verify
 from crud.auth import create_refresh_token_record, get_refresh_token_by_token_hash, revoke_token_by_token_hash
+from crud.project import create_project_by_data
 from crud.user import create_user, get_user_by_user_id, get_user_by_username
 from exceptions.auth import InvalidCredentialsError, InvalidRefreshTokenError
 from exceptions.user import UsernameAlreadyExistsError
+from models.enums import CreationSource, ProjectStatus, ProjectSystemType
 from schemas.auth import AuthResponse, LoginRequest, RegisterRequest
 from schemas.user import UserRead
 
@@ -21,8 +24,20 @@ async def register(register_request: RegisterRequest, db: AsyncSession) -> tuple
             hashed_password = get_hashed_password(register_request.password)
             user = await create_user(register_request.username, hashed_password, db)
 
+            await create_project_by_data(
+                {
+                    "owner_user_id": user.user_id,
+                    "title": "Inbox",
+                    "status": ProjectStatus.ACTIVE,
+                    "creation_source": CreationSource.SYSTEM,
+                    "system_type": ProjectSystemType.INBOX,
+                },
+                db,
+            )
+
             access_token = create_access_token(str(user.user_id))
             refresh_token, expires_at = create_refresh_token(str(user.user_id))
+            expires_at = expires_at.replace(tzinfo=None)
             token_hash = hash_token(refresh_token)
             await create_refresh_token_record(token_hash, expires_at, user.user_id, db)
             await db.refresh(user)
@@ -40,6 +55,7 @@ async def login(login_request: LoginRequest, db: AsyncSession) -> tuple[AuthResp
         
         access_token = create_access_token(str(user.user_id))
         refresh_token, expires_at = create_refresh_token(str(user.user_id))
+        expires_at = expires_at.replace(tzinfo=None)
         token_hash = hash_token(refresh_token)
         await create_refresh_token_record(token_hash, expires_at, user.user_id, db)
         await db.refresh(user)
@@ -66,7 +82,7 @@ async def refresh(refresh_token: str | None, db: AsyncSession):
         if old_refresh_token is None:
             raise InvalidRefreshTokenError()
         
-        if old_refresh_token.expires_at < datetime.now(timezone.utc):
+        if old_refresh_token.expires_at <= utc_now_naive():
             raise InvalidRefreshTokenError()
         
         if old_refresh_token.revoked_at is not None:
@@ -90,6 +106,7 @@ async def refresh(refresh_token: str | None, db: AsyncSession):
 
         access_token = create_access_token(str(user_id))
         new_refresh_token, expires_at = create_refresh_token(str(user_id))
+        expires_at = expires_at.replace(tzinfo=None)
         new_token_hash = hash_token(new_refresh_token)
 
         await create_refresh_token_record(new_token_hash, expires_at, user_id, db)
