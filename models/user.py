@@ -23,3 +23,7 @@ class User(Base):
         "RefreshToken", 
         back_populates="user"
     )
+    sessions: Mapped[list["AgentSession"]] = relationship( # type: ignore
+        "AgentSession",
+        back_populates="user",
+    )
