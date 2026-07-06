@@ -10,6 +10,9 @@ const state = {
   showArchivedTasks: false,
   parentTask: null,
   editingTask: null,
+  planningState: null,
+  agentPendingMessage: null,
+  agentSending: false,
 };
 
 let refreshPromise = null;
@@ -97,6 +100,19 @@ function isDefaultProject(project) {
   return project?.system_type === "inbox";
 }
 
+function createPlanningState() {
+  return {
+    messages: [],
+    info: {
+      goal: null,
+      constraints: null,
+      completion_criteria: null,
+    },
+    phase: "clarifying",
+    draft: null,
+  };
+}
+
 function showToast(message) {
   clearTimeout(toastTimer);
   $("toast").textContent = message;
@@ -128,6 +144,9 @@ function persistAuth(payload) {
 function clearAuth() {
   state.token = null;
   state.user = null;
+  state.planningState = null;
+  state.agentPendingMessage = null;
+  state.agentSending = false;
   localStorage.removeItem("planwise_token");
   localStorage.removeItem("planwise_user");
 }
@@ -203,6 +222,92 @@ function showApp() {
 
 function closeDialog(dialog) {
   if (dialog.open) dialog.close();
+}
+
+function renderAgentList(values, emptyText = "尚未确认") {
+  if (values === null || values === undefined) return escapeHtml(emptyText);
+  if (values.length === 0) return "无特殊要求";
+  return `<ul>${values.map((value) => `<li>${escapeHtml(value)}</li>`).join("")}</ul>`;
+}
+
+function renderAgent() {
+  const planningState = state.planningState || createPlanningState();
+  const messages = planningState.messages || [];
+  const messageHtml = messages.map((message) => `
+    <article class="agent-message ${message.role}">
+      <span>${message.role === "user" ? "你" : "Agent"}</span>
+      <p>${escapeHtml(message.content).replaceAll("\n", "<br>")}</p>
+    </article>
+  `);
+
+  if (state.agentPendingMessage) {
+    messageHtml.push(`
+      <article class="agent-message user pending">
+        <span>你</span>
+        <p>${escapeHtml(state.agentPendingMessage).replaceAll("\n", "<br>")}</p>
+      </article>
+      <article class="agent-message assistant loading">
+        <span>Agent</span>
+        <p><i></i><i></i><i></i></p>
+      </article>
+    `);
+  }
+
+  $("agentMessages").innerHTML = messageHtml.length
+    ? messageHtml.join("")
+    : `
+      <div class="agent-empty">
+        <span>✦</span>
+        <strong>从一个目标开始</strong>
+        <p>不需要一次说清楚全部信息，Agent 会逐轮询问。</p>
+      </div>
+    `;
+
+  const info = planningState.info || {};
+  $("agentGoal").textContent = info.goal || "尚未确认";
+  $("agentConstraints").innerHTML = renderAgentList(info.constraints);
+  $("agentCriteria").innerHTML = renderAgentList(info.completion_criteria);
+  $("agentMessageCount").textContent = `${messages.length} 条消息`;
+  $("agentPhase").textContent = planningState.phase === "draft_ready" ? "草稿已生成" : "澄清中";
+  $("agentPhase").classList.toggle("ready", planningState.phase === "draft_ready");
+
+  const draft = planningState.draft;
+  $("agentDraftCard").classList.toggle("hidden", !draft);
+  if (draft) {
+    $("agentDraftSummary").textContent = draft.summary;
+    $("agentDraftTasks").innerHTML = draft.tasks.map((task) => `
+      <li>
+        <strong>${escapeHtml(task.title)}</strong>
+        ${task.description ? `<p>${escapeHtml(task.description)}</p>` : ""}
+        <small>完成标准：${escapeHtml(task.acceptance_criteria)}</small>
+      </li>
+    `).join("");
+  }
+
+  $("agentStateJson").textContent = JSON.stringify(planningState, null, 2);
+  $("agentMessage").disabled = state.agentSending;
+  $("agentSubmitButton").disabled = state.agentSending;
+  $("resetAgentButton").disabled = state.agentSending;
+  $("agentSubmitButton").textContent = state.agentSending ? "处理中…" : "发送";
+  $("agentMessages").scrollTop = $("agentMessages").scrollHeight;
+}
+
+function openAgentDialog() {
+  if (!state.planningState) state.planningState = createPlanningState();
+  $("agentError").textContent = "";
+  renderAgent();
+  $("agentDialog").showModal();
+  $("agentMessage").focus();
+}
+
+function resetAgentSession() {
+  state.planningState = createPlanningState();
+  state.agentPendingMessage = null;
+  $("agentMessage").value = "";
+  $("agentCharacterCount").textContent = "0 / 5000";
+  $("agentError").textContent = "";
+  renderAgent();
+  $("agentMessage").focus();
 }
 
 function openProfileDialog() {
@@ -514,6 +619,52 @@ $("profileForm").addEventListener("submit", async (event) => {
   }
 });
 
+$("openAgentButton").addEventListener("click", openAgentDialog);
+$("closeAgentButton").addEventListener("click", () => closeDialog($("agentDialog")));
+$("resetAgentButton").addEventListener("click", resetAgentSession);
+$("agentMessage").addEventListener("input", (event) => {
+  $("agentCharacterCount").textContent = `${event.target.value.length} / 5000`;
+});
+$("agentMessage").addEventListener("keydown", (event) => {
+  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+    event.preventDefault();
+    $("agentForm").requestSubmit();
+  }
+});
+$("agentForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (state.agentSending) return;
+
+  const message = $("agentMessage").value.trim();
+  if (!message) return;
+  if (!state.planningState) state.planningState = createPlanningState();
+
+  $("agentError").textContent = "";
+  state.agentSending = true;
+  state.agentPendingMessage = message;
+  renderAgent();
+
+  try {
+    state.planningState = await api("/api/agent/planning/turn", {
+      method: "POST",
+      body: JSON.stringify({
+        message,
+        state: state.planningState,
+      }),
+    });
+    $("agentMessage").value = "";
+    $("agentCharacterCount").textContent = "0 / 5000";
+  } catch (error) {
+    $("agentError").textContent = error.message;
+  } finally {
+    state.agentPendingMessage = null;
+    state.agentSending = false;
+    renderAgent();
+    if (!$("agentDialog").open) return;
+    $("agentMessage").focus();
+  }
+});
+
 $("showProjectFormButton").addEventListener("click", () => $("projectForm").classList.remove("hidden"));
 $("cancelProjectButton").addEventListener("click", () => $("projectForm").classList.add("hidden"));
 $("projectForm").addEventListener("submit", async (event) => {
@@ -744,7 +895,7 @@ $("taskList").addEventListener("click", async (event) => {
   }
 });
 
-[$("profileDialog"), $("projectDialog")].forEach((dialog) => {
+[$("profileDialog"), $("projectDialog"), $("agentDialog")].forEach((dialog) => {
   dialog.addEventListener("click", (event) => {
     if (event.target === dialog) closeDialog(dialog);
   });

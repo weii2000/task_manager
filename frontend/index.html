@@ -81,12 +81,12 @@
           <span>归档项目</span><span id="archiveCount">0</span>
         </button>
 
-        <div class="agent-teaser">
+        <button class="agent-teaser" id="openAgentButton" type="button">
           <span class="agent-icon">✦</span>
           <strong>规划助手</strong>
-          <p>多轮澄清与自动拆解将在下一阶段接入。</p>
-          <span class="coming-soon">Agent phase</span>
-        </div>
+          <span class="agent-description">通过多轮澄清生成结构化任务草稿。</span>
+          <span class="coming-soon">开始规划 →</span>
+        </button>
       </aside>
 
       <main class="content">
@@ -258,6 +258,86 @@
         <button class="primary-button" id="projectEditSubmitButton" type="submit">保存项目</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog class="agent-dialog" id="agentDialog" aria-labelledby="agentDialogTitle">
+    <div class="agent-shell">
+      <header class="agent-header">
+        <div>
+          <p class="eyebrow">PLANNING AGENT</p>
+          <div class="agent-title-row">
+            <h2 id="agentDialogTitle">规划助手</h2>
+            <span class="agent-phase" id="agentPhase">澄清中</span>
+          </div>
+          <p>描述你的目标，Agent 会逐步确认约束和完成标准，再生成任务草稿。</p>
+        </div>
+        <div class="agent-header-actions">
+          <button class="text-button" id="resetAgentButton" type="button">重新开始</button>
+          <button class="modal-close" id="closeAgentButton" type="button" aria-label="关闭">×</button>
+        </div>
+      </header>
+
+      <div class="agent-workspace">
+        <section class="agent-conversation">
+          <div class="agent-messages" id="agentMessages" aria-live="polite"></div>
+
+          <form class="agent-form" id="agentForm">
+            <label class="sr-only" for="agentMessage">发送给规划助手的消息</label>
+            <textarea
+              id="agentMessage"
+              maxlength="5000"
+              placeholder="例如：我想在三个月内找到一份 AI Agent 工程实习……"
+              required
+            ></textarea>
+            <div class="agent-form-footer">
+              <div>
+                <span class="agent-shortcut">⌘/Ctrl + Enter 发送</span>
+                <span class="agent-character-count" id="agentCharacterCount">0 / 5000</span>
+              </div>
+              <button class="primary-button" id="agentSubmitButton" type="submit">发送</button>
+            </div>
+            <p class="form-error" id="agentError" role="alert"></p>
+          </form>
+        </section>
+
+        <aside class="agent-inspector">
+          <section class="agent-info-card">
+            <div class="agent-section-heading">
+              <h3>已整理的信息</h3>
+              <span id="agentMessageCount">0 条消息</span>
+            </div>
+            <dl class="agent-info-list">
+              <div>
+                <dt>目标</dt>
+                <dd id="agentGoal">尚未确认</dd>
+              </div>
+              <div>
+                <dt>约束</dt>
+                <dd id="agentConstraints">尚未确认</dd>
+              </div>
+              <div>
+                <dt>完成标准</dt>
+                <dd id="agentCriteria">尚未确认</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section class="agent-draft-card hidden" id="agentDraftCard">
+            <div class="agent-section-heading">
+              <h3>计划草稿</h3>
+              <span>仅预览</span>
+            </div>
+            <p id="agentDraftSummary"></p>
+            <ol class="agent-draft-tasks" id="agentDraftTasks"></ol>
+          </section>
+
+          <details class="agent-debug">
+            <summary>查看 PlanningState JSON</summary>
+            <pre id="agentStateJson"></pre>
+          </details>
+        </aside>
+      </div>
+    </div>
   </dialog>
 
   <div class="toast" id="toast" role="status"></div>
