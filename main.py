@@ -6,7 +6,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
 from database.session import async_engine
-from router import auth, project, task, user
+from dependencies.agent import close_planning_provider
+from router import agent, auth, project, task, user
 from exceptions.base import AppError
 from exceptions.handlers import app_error_handler, http_exception_handler, validation_exception_handler, unexpected_exception_handler
 
@@ -14,6 +15,7 @@ from exceptions.handlers import app_error_handler, http_exception_handler, valid
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     yield
+    await close_planning_provider()
     await async_engine.dispose()
 
 
@@ -43,3 +45,4 @@ app.include_router(auth.router)
 app.include_router(user.router)
 app.include_router(project.router)
 app.include_router(task.router)
+app.include_router(agent.router)
