@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="light">
-  <title>Planwise · Agent 任务规划</title>
+  <title>Planwise · 任务规划</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
 </head>
@@ -14,13 +14,13 @@
       <div class="brand-mark">P</div>
       <div>
         <strong>Planwise</strong>
-        <span>Agent-native task planning</span>
+        <span>Personal task planning</span>
       </div>
     </div>
     <div class="auth-copy">
       <p class="eyebrow">从模糊目标到下一步行动</p>
       <h1>让计划真正<br>推动事情发生。</h1>
-      <p>先建立清晰可靠的项目与任务，再让 Agent 参与澄清、拆解和动态调整。</p>
+      <p>把目标、项目和下一步行动整理清楚。后续的智能规划能力会接在这个稳定的任务系统之上。</p>
     </div>
     <div class="auth-card">
       <div class="auth-tabs">
@@ -81,11 +81,11 @@
           <span>归档项目</span><span id="archiveCount">0</span>
         </button>
 
-        <button class="agent-teaser" id="openAgentButton" type="button">
-          <span class="agent-icon">✦</span>
+        <button class="agent-teaser agent-placeholder" id="openAgentButton" type="button" disabled aria-disabled="true">
+          <span class="agent-icon">···</span>
           <strong>规划助手</strong>
-          <span class="agent-description">通过多轮澄清生成结构化任务草稿。</span>
-          <span class="coming-soon">开始规划 →</span>
+          <span class="agent-description">功能位已预留，后续接入规划流程。</span>
+          <span class="coming-soon">待接入</span>
         </button>
       </aside>
 
@@ -164,6 +164,14 @@
                   <option value="high">高</option>
                   <option value="urgent">紧急</option>
                 </select>
+              </label>
+              <label>
+                <span>开始时间</span>
+                <input id="taskStartTime" type="datetime-local">
+              </label>
+              <label>
+                <span>截止时间</span>
+                <input id="taskDueTime" type="datetime-local">
               </label>
               <label class="wide">
                 <span>描述</span>
@@ -286,7 +294,7 @@
             <textarea
               id="agentMessage"
               maxlength="5000"
-              placeholder="例如：我想在三个月内找到一份 AI Agent 工程实习……"
+              placeholder="例如：我想把作品集项目拆成三周计划……"
               required
             ></textarea>
             <div class="agent-form-footer">
