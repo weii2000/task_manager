@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="light">
   <title>Planwise · Agent 任务规划</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -51,7 +52,9 @@
       </div>
       <div class="topbar-actions">
         <span class="sync-state"><i></i> API connected</span>
-        <span class="username" id="navUsername">—</span>
+        <button class="username" id="profileButton" type="button" aria-label="编辑个人资料">
+          <span id="navUsername">—</span>
+        </button>
         <button class="ghost-button" id="logoutButton" type="button">退出</button>
       </div>
     </header>
@@ -89,14 +92,33 @@
       <main class="content">
         <section class="project-header">
           <div>
-            <p class="eyebrow" id="projectEyebrow">INBOX</p>
-            <h1 id="currentProjectTitle">收件箱</h1>
-            <p id="currentProjectGoal">没有明确归属的事项会集中在这里。</p>
+            <p class="eyebrow" id="projectEyebrow">CAPTURE</p>
+            <h1 id="currentProjectTitle">待整理</h1>
+            <p id="currentProjectGoal">尚未归类的目标和任务会集中在这里，稍后再整理。</p>
           </div>
           <div class="project-actions" id="projectActions">
-            <select id="projectStatusSelect" aria-label="项目状态"></select>
-            <button class="ghost-button danger hidden" id="archiveProjectButton" type="button">归档项目</button>
-            <button class="ghost-button hidden" id="restoreProjectButton" type="button">恢复项目</button>
+            <select class="hidden" id="projectStatusSelect" aria-label="项目状态"></select>
+            <button class="ghost-button icon-button hidden" id="editProjectButton" type="button" aria-label="编辑项目" title="编辑项目">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 20h9"/>
+                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-5 1 1-5Z"/>
+              </svg>
+            </button>
+            <button class="ghost-button icon-button danger hidden" id="archiveProjectButton" type="button" aria-label="归档项目" title="归档项目">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 7h16l-1 13H5Z"/>
+                <path d="M3 4h18v3H3Z"/>
+                <path d="M9 11h6"/>
+              </svg>
+            </button>
+            <button class="ghost-button icon-button hidden" id="restoreProjectButton" type="button" aria-label="恢复项目" title="恢复项目">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 7h16l-1 13H5Z"/>
+                <path d="M3 4h18v3H3Z"/>
+                <path d="M8 14a4 4 0 0 1 7-2"/>
+                <path d="M15 9v3h-3"/>
+              </svg>
+            </button>
           </div>
         </section>
 
@@ -121,6 +143,10 @@
           </div>
 
           <form class="task-form hidden" id="taskForm">
+            <div class="form-heading">
+              <strong id="taskFormTitle">添加任务</strong>
+              <span id="taskFormHint">创建一个清晰、可执行的行动。</span>
+            </div>
             <div class="parent-context hidden" id="parentContext">
               <span>正在添加子任务：<strong id="parentTaskTitle"></strong></span>
               <button class="text-button" id="clearParentButton" type="button">取消</button>
@@ -151,7 +177,7 @@
             <p class="form-error" id="taskError" role="alert"></p>
             <div class="form-actions">
               <button class="text-button" id="cancelTaskButton" type="button">取消</button>
-              <button class="primary-button" type="submit">保存任务</button>
+              <button class="primary-button" id="taskSubmitButton" type="submit">创建任务</button>
             </div>
           </form>
 
@@ -174,6 +200,65 @@
       </main>
     </div>
   </section>
+
+  <dialog class="modal" id="profileDialog">
+    <form class="modal-card" id="profileForm">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">ACCOUNT</p>
+          <h2>个人资料</h2>
+        </div>
+        <button class="modal-close" id="closeProfileButton" type="button" aria-label="关闭">×</button>
+      </div>
+      <label>
+        <span>用户名</span>
+        <input id="profileUsername" disabled>
+        <small>当前后端暂不支持修改用户名。</small>
+      </label>
+      <label>
+        <span>邮箱</span>
+        <input id="profileEmail" type="email" autocomplete="email" placeholder="name@example.com">
+      </label>
+      <label>
+        <span>个人简介</span>
+        <textarea id="profileBio" maxlength="500" placeholder="介绍你的关注方向或当前目标"></textarea>
+      </label>
+      <p class="form-error" id="profileError" role="alert"></p>
+      <div class="form-actions">
+        <button class="text-button" id="cancelProfileButton" type="button">取消</button>
+        <button class="primary-button" id="profileSubmitButton" type="submit">保存资料</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="modal" id="projectDialog">
+    <form class="modal-card" id="projectEditForm">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">PROJECT</p>
+          <h2>编辑项目</h2>
+        </div>
+        <button class="modal-close" id="closeProjectButton" type="button" aria-label="关闭">×</button>
+      </div>
+      <label>
+        <span>项目名称</span>
+        <input id="editProjectTitle" maxlength="100" required>
+      </label>
+      <label>
+        <span>项目目标</span>
+        <textarea id="editProjectGoal" maxlength="2000" placeholder="这个项目最终想实现什么？"></textarea>
+      </label>
+      <label>
+        <span>补充说明</span>
+        <textarea id="editProjectDescription" maxlength="5000" placeholder="背景、约束或其他上下文"></textarea>
+      </label>
+      <p class="form-error" id="projectEditError" role="alert"></p>
+      <div class="form-actions">
+        <button class="text-button" id="cancelProjectEditButton" type="button">取消</button>
+        <button class="primary-button" id="projectEditSubmitButton" type="submit">保存项目</button>
+      </div>
+    </form>
+  </dialog>
 
   <div class="toast" id="toast" role="status"></div>
   <script src="/app.js" defer></script>

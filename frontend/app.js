@@ -9,6 +9,7 @@ const state = {
   taskFilter: "all",
   showArchivedTasks: false,
   parentTask: null,
+  editingTask: null,
 };
 
 let refreshPromise = null;
@@ -30,6 +31,13 @@ const TASK_STATUS_LABELS = {
   cancelled: "已取消",
 };
 
+const TASK_PRIORITY_LABELS = {
+  low: "低",
+  medium: "中",
+  high: "高",
+  urgent: "紧急",
+};
+
 const TASK_TRANSITIONS = {
   todo: ["todo", "in_progress", "done", "cancelled"],
   in_progress: ["in_progress", "blocked", "done", "cancelled"],
@@ -45,6 +53,37 @@ const PROJECT_TRANSITIONS = {
   completed: ["completed", "active"],
 };
 
+const ICONS = {
+  edit: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 20h9"/>
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-5 1 1-5Z"/>
+    </svg>
+  `,
+  child: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M6 4v7a4 4 0 0 0 4 4h8"/>
+      <path d="M15 12l3 3-3 3"/>
+      <path d="M18 6v4M16 8h4"/>
+    </svg>
+  `,
+  archive: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 7h16l-1 13H5Z"/>
+      <path d="M3 4h18v3H3Z"/>
+      <path d="M9 11h6"/>
+    </svg>
+  `,
+  restore: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 7h16l-1 13H5Z"/>
+      <path d="M3 4h18v3H3Z"/>
+      <path d="M8 14a4 4 0 0 1 7-2"/>
+      <path d="M15 9v3h-3"/>
+    </svg>
+  `,
+};
+
 function escapeHtml(value = "") {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -52,6 +91,10 @@ function escapeHtml(value = "") {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function isDefaultProject(project) {
+  return project?.system_type === "inbox";
 }
 
 function showToast(message) {
@@ -158,6 +201,28 @@ function showApp() {
   $("navUsername").textContent = state.user?.username || "—";
 }
 
+function closeDialog(dialog) {
+  if (dialog.open) dialog.close();
+}
+
+function openProfileDialog() {
+  $("profileUsername").value = state.user?.username || "";
+  $("profileEmail").value = state.user?.email || "";
+  $("profileBio").value = state.user?.bio || "";
+  $("profileError").textContent = "";
+  $("profileDialog").showModal();
+}
+
+function openProjectDialog() {
+  const project = state.selectedProject;
+  if (!project || isDefaultProject(project) || project.archived_time) return;
+  $("editProjectTitle").value = project.title;
+  $("editProjectGoal").value = project.goal || "";
+  $("editProjectDescription").value = project.description || "";
+  $("projectEditError").textContent = "";
+  $("projectDialog").showModal();
+}
+
 async function loadProjects() {
   const [active, archived] = await Promise.all([
     api("/api/projects"),
@@ -169,7 +234,7 @@ async function loadProjects() {
 
   if (!state.selectedProject || state.selectedProject.archived_time) {
     state.selectedProject =
-      state.projects.find((project) => project.system_type === "inbox")
+      state.projects.find(isDefaultProject)
       || state.projects[0]
       || null;
   } else {
@@ -184,13 +249,13 @@ async function loadProjects() {
 }
 
 function projectButton(project) {
-  const inbox = project.system_type === "inbox";
+  const inbox = isDefaultProject(project);
   const active = state.selectedProject?.project_id === project.project_id;
   return `
     <button class="project-item ${active ? "active" : ""}" data-project-id="${project.project_id}" type="button">
       <span class="project-symbol">${inbox ? "⌂" : escapeHtml(project.title.slice(0, 1).toUpperCase())}</span>
-      <span class="project-name">${inbox ? "收件箱" : escapeHtml(project.title)}</span>
-      <span class="project-count">${PROJECT_STATUS_LABELS[project.status] || ""}</span>
+      <span class="project-name">${inbox ? "待整理" : escapeHtml(project.title)}</span>
+      <span class="project-count">${inbox ? "" : PROJECT_STATUS_LABELS[project.status] || ""}</span>
     </button>
   `;
 }
@@ -205,17 +270,17 @@ function renderProjectHeader() {
   const project = state.selectedProject;
   if (!project) {
     $("currentProjectTitle").textContent = "还没有项目";
-    $("currentProjectGoal").textContent = "先创建一个项目，或重新登录生成 Inbox。";
+    $("currentProjectGoal").textContent = "先创建一个项目，或重新登录生成默认项目。";
     $("projectActions").classList.add("hidden");
     return;
   }
-  const inbox = project.system_type === "inbox";
+  const inbox = isDefaultProject(project);
   const archived = Boolean(project.archived_time);
-  $("projectActions").classList.remove("hidden");
-  $("projectEyebrow").textContent = inbox ? "INBOX" : archived ? "ARCHIVED PROJECT" : "PROJECT";
-  $("currentProjectTitle").textContent = inbox ? "收件箱" : project.title;
+  $("projectActions").classList.toggle("hidden", inbox);
+  $("projectEyebrow").textContent = inbox ? "CAPTURE" : archived ? "ARCHIVED PROJECT" : "PROJECT";
+  $("currentProjectTitle").textContent = inbox ? "待整理" : project.title;
   $("currentProjectGoal").textContent = inbox
-    ? "没有明确归属的事项会集中在这里。"
+    ? "尚未归类的目标和任务会集中在这里，稍后再整理。"
     : project.goal || project.description || "为这个项目补充一个清晰目标。";
 
   const statusSelect = $("projectStatusSelect");
@@ -223,6 +288,8 @@ function renderProjectHeader() {
     .map((value) => `<option value="${value}" ${value === project.status ? "selected" : ""}>${PROJECT_STATUS_LABELS[value]}</option>`)
     .join("");
   statusSelect.disabled = inbox || archived;
+  statusSelect.classList.toggle("hidden", inbox || archived);
+  $("editProjectButton").classList.toggle("hidden", inbox || archived);
   $("archiveProjectButton").classList.toggle("hidden", inbox || archived);
   $("restoreProjectButton").classList.toggle("hidden", inbox || !archived);
 }
@@ -232,6 +299,7 @@ async function selectProject(id) {
   state.selectedProject = all.find((project) => project.project_id === Number(id)) || null;
   state.showArchivedTasks = false;
   $("toggleArchivedTasksButton").textContent = "查看归档任务";
+  $("toggleArchivedTasksButton").classList.remove("active");
   renderProjects(Boolean(state.selectedProject?.archived_time));
   renderProjectHeader();
   await loadTasks();
@@ -283,23 +351,26 @@ function renderTaskTree(tasks) {
       if (visited.has(task.task_id)) return "";
       visited.add(task.task_id);
       const done = task.status === "done";
-      const description = task.acceptance_criteria || task.description || "";
       return `
         <article class="task-row ${done ? "done" : ""}" style="--depth:${Math.min(depth, 6)}">
           <button class="task-check ${done ? "done" : ""}" data-complete-task="${task.task_id}" type="button" aria-label="${done ? "重新打开" : "完成任务"}" ${state.showArchivedTasks ? "disabled" : ""}>✓</button>
           <div class="task-copy">
             <div class="task-title">${escapeHtml(task.title)}</div>
-            ${description ? `<p class="task-description">${escapeHtml(description)}</p>` : ""}
+            ${task.description ? `<p class="task-description">${escapeHtml(task.description)}</p>` : ""}
+            ${task.acceptance_criteria ? `<p class="task-criteria"><strong>完成标准：</strong>${escapeHtml(task.acceptance_criteria)}</p>` : ""}
             <div class="task-tags">
-              <span class="pill priority-${task.priority}">${escapeHtml(task.priority)}</span>
+              <span class="pill priority-${task.priority}">${TASK_PRIORITY_LABELS[task.priority] || escapeHtml(task.priority)}</span>
               <span class="pill">${TASK_STATUS_LABELS[task.status]}</span>
             </div>
           </div>
           <select data-task-status="${task.task_id}" aria-label="任务状态" ${state.showArchivedTasks ? "disabled" : ""}>${taskStatusOptions(task)}</select>
           <div class="task-row-actions">
-            ${state.showArchivedTasks ? `<button data-restore-task="${task.task_id}" type="button">恢复</button>` : `
-              ${["done", "cancelled"].includes(task.status) ? "" : `<button data-child-task="${task.task_id}" type="button">子任务</button>`}
-              <button data-archive-task="${task.task_id}" type="button">归档</button>
+            ${state.showArchivedTasks ? `
+              <button class="icon-button" data-restore-task="${task.task_id}" type="button" aria-label="恢复任务" title="恢复任务">${ICONS.restore}</button>
+            ` : `
+              <button class="icon-button" data-edit-task="${task.task_id}" type="button" aria-label="编辑任务" title="编辑任务">${ICONS.edit}</button>
+              ${["done", "cancelled"].includes(task.status) ? "" : `<button class="icon-button" data-child-task="${task.task_id}" type="button" aria-label="添加子任务" title="添加子任务">${ICONS.child}</button>`}
+              <button class="icon-button danger" data-archive-task="${task.task_id}" type="button" aria-label="归档任务" title="归档任务">${ICONS.archive}</button>
             `}
           </div>
         </article>
@@ -331,16 +402,30 @@ function resetTaskForm() {
   $("taskPriority").value = "medium";
   $("taskError").textContent = "";
   state.parentTask = null;
+  state.editingTask = null;
+  $("taskFormTitle").textContent = "添加任务";
+  $("taskFormHint").textContent = "创建一个清晰、可执行的行动。";
+  $("taskSubmitButton").textContent = "创建任务";
   $("parentContext").classList.add("hidden");
 }
 
-function openTaskForm(parentTask = null) {
+function openTaskForm(parentTask = null, editingTask = null) {
   if (!state.selectedProject || state.selectedProject.archived_time) return;
   resetTaskForm();
   state.parentTask = parentTask;
+  state.editingTask = editingTask;
   if (parentTask) {
     $("parentTaskTitle").textContent = parentTask.title;
     $("parentContext").classList.remove("hidden");
+  }
+  if (editingTask) {
+    $("taskFormTitle").textContent = "编辑任务";
+    $("taskFormHint").textContent = "修改任务内容不会改变当前状态。";
+    $("taskSubmitButton").textContent = "保存修改";
+    $("taskTitle").value = editingTask.title;
+    $("taskPriority").value = editingTask.priority;
+    $("taskDescription").value = editingTask.description || "";
+    $("taskCriteria").value = editingTask.acceptance_criteria || "";
   }
   $("taskForm").classList.remove("hidden");
   $("taskTitle").focus();
@@ -403,6 +488,32 @@ $("logoutButton").addEventListener("click", async () => {
   showAuth();
 });
 
+$("profileButton").addEventListener("click", openProfileDialog);
+$("closeProfileButton").addEventListener("click", () => closeDialog($("profileDialog")));
+$("cancelProfileButton").addEventListener("click", () => closeDialog($("profileDialog")));
+$("profileForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  $("profileError").textContent = "";
+  $("profileSubmitButton").disabled = true;
+  try {
+    state.user = await api("/api/user/me", {
+      method: "PATCH",
+      body: JSON.stringify({
+        email: $("profileEmail").value.trim() || null,
+        bio: $("profileBio").value.trim() || null,
+      }),
+    });
+    localStorage.setItem("planwise_user", JSON.stringify(state.user));
+    $("navUsername").textContent = state.user.username;
+    closeDialog($("profileDialog"));
+    showToast("个人资料已更新");
+  } catch (error) {
+    $("profileError").textContent = error.message;
+  } finally {
+    $("profileSubmitButton").disabled = false;
+  }
+});
+
 $("showProjectFormButton").addEventListener("click", () => $("projectForm").classList.remove("hidden"));
 $("cancelProjectButton").addEventListener("click", () => $("projectForm").classList.add("hidden"));
 $("projectForm").addEventListener("submit", async (event) => {
@@ -445,7 +556,7 @@ $("archiveNavButton").addEventListener("click", () => {
     loadTasks().catch((error) => showToast(error.message));
   } else {
     state.selectedProject =
-      state.projects.find((project) => project.system_type === "inbox")
+      state.projects.find(isDefaultProject)
       || state.projects[0]
       || null;
     renderProjects(false);
@@ -468,6 +579,35 @@ $("projectStatusSelect").addEventListener("change", async (event) => {
   } catch (error) {
     renderProjectHeader();
     showToast(error.message);
+  }
+});
+
+$("editProjectButton").addEventListener("click", openProjectDialog);
+$("closeProjectButton").addEventListener("click", () => closeDialog($("projectDialog")));
+$("cancelProjectEditButton").addEventListener("click", () => closeDialog($("projectDialog")));
+$("projectEditForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const project = state.selectedProject;
+  if (!project) return;
+  $("projectEditError").textContent = "";
+  $("projectEditSubmitButton").disabled = true;
+  try {
+    state.selectedProject = await api(`/api/projects/${project.project_id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        title: $("editProjectTitle").value.trim(),
+        goal: $("editProjectGoal").value.trim() || null,
+        description: $("editProjectDescription").value.trim() || null,
+      }),
+    });
+    closeDialog($("projectDialog"));
+    await loadProjects();
+    await loadTasks();
+    showToast("项目信息已更新");
+  } catch (error) {
+    $("projectEditError").textContent = error.message;
+  } finally {
+    $("projectEditSubmitButton").disabled = false;
   }
 });
 
@@ -508,24 +648,38 @@ $("taskForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!state.selectedProject) return;
   $("taskError").textContent = "";
+  $("taskSubmitButton").disabled = true;
   try {
-    await api("/api/tasks", {
-      method: "POST",
-      body: JSON.stringify({
-        project_id: state.selectedProject.project_id,
-        parent_task_id: state.parentTask?.task_id || null,
-        title: $("taskTitle").value.trim(),
-        description: $("taskDescription").value.trim() || null,
-        acceptance_criteria: $("taskCriteria").value.trim() || null,
-        priority: $("taskPriority").value,
-      }),
-    });
+    const taskData = {
+      title: $("taskTitle").value.trim(),
+      description: $("taskDescription").value.trim() || null,
+      acceptance_criteria: $("taskCriteria").value.trim() || null,
+      priority: $("taskPriority").value,
+    };
+    if (state.editingTask) {
+      await api(`/api/tasks/${state.editingTask.task_id}`, {
+        method: "PATCH",
+        body: JSON.stringify(taskData),
+      });
+    } else {
+      await api("/api/tasks", {
+        method: "POST",
+        body: JSON.stringify({
+          project_id: state.selectedProject.project_id,
+          parent_task_id: state.parentTask?.task_id || null,
+          ...taskData,
+        }),
+      });
+    }
+    const successMessage = state.editingTask ? "任务已更新" : "任务已创建";
     resetTaskForm();
     $("taskForm").classList.add("hidden");
     await loadTasks();
-    showToast("任务已创建");
+    showToast(successMessage);
   } catch (error) {
     $("taskError").textContent = error.message;
+  } finally {
+    $("taskSubmitButton").disabled = false;
   }
 });
 
@@ -540,6 +694,7 @@ $("statusFilters").addEventListener("click", (event) => {
 $("toggleArchivedTasksButton").addEventListener("click", async () => {
   state.showArchivedTasks = !state.showArchivedTasks;
   $("toggleArchivedTasksButton").textContent = state.showArchivedTasks ? "查看当前任务" : "查看归档任务";
+  $("toggleArchivedTasksButton").classList.toggle("active", state.showArchivedTasks);
   try {
     await loadTasks();
   } catch (error) {
@@ -560,6 +715,7 @@ $("taskList").addEventListener("change", async (event) => {
 
 $("taskList").addEventListener("click", async (event) => {
   const completeButton = event.target.closest("[data-complete-task]");
+  const editButton = event.target.closest("[data-edit-task]");
   const childButton = event.target.closest("[data-child-task]");
   const archiveButton = event.target.closest("[data-archive-task]");
   const restoreButton = event.target.closest("[data-restore-task]");
@@ -568,6 +724,9 @@ $("taskList").addEventListener("click", async (event) => {
       const task = state.tasks.find((item) => item.task_id === Number(completeButton.dataset.completeTask));
       const targetStatus = ["done", "cancelled"].includes(task.status) ? "todo" : "done";
       await changeTaskStatus(task.task_id, targetStatus);
+    } else if (editButton) {
+      const task = state.tasks.find((item) => item.task_id === Number(editButton.dataset.editTask));
+      openTaskForm(null, task);
     } else if (childButton) {
       const task = state.tasks.find((item) => item.task_id === Number(childButton.dataset.childTask));
       openTaskForm(task);
@@ -583,6 +742,12 @@ $("taskList").addEventListener("click", async (event) => {
   } catch (error) {
     showToast(error.message);
   }
+});
+
+[$("profileDialog"), $("projectDialog")].forEach((dialog) => {
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) closeDialog(dialog);
+  });
 });
 
 boot();
