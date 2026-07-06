@@ -8,6 +8,7 @@ const state = {
   tasks: [],
   taskFilter: "all",
   showArchivedTasks: false,
+  collapsedTaskIds: new Set(),
   parentTask: null,
   editingTask: null,
   planningState: null,
@@ -96,6 +97,108 @@ function escapeHtml(value = "") {
     .replaceAll("'", "&#039;");
 }
 
+function padDatePart(value) {
+  return String(value).padStart(2, "0");
+}
+
+function parseDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function dateToDatetimeLocalValue(value) {
+  const date = parseDate(value);
+  if (!date) return "";
+  return [
+    date.getFullYear(),
+    padDatePart(date.getMonth() + 1),
+    padDatePart(date.getDate()),
+  ].join("-")
+    + "T"
+    + [
+      padDatePart(date.getHours()),
+      padDatePart(date.getMinutes()),
+    ].join(":");
+}
+
+function datetimeLocalToApi(value) {
+  if (!value) return null;
+  const date = parseDate(value);
+  if (!date) throw new Error("时间格式不正确");
+  return date.toISOString();
+}
+
+function isSameLocalDate(left, right) {
+  return left.getFullYear() === right.getFullYear()
+    && left.getMonth() === right.getMonth()
+    && left.getDate() === right.getDate();
+}
+
+function formatClock(date) {
+  return `${padDatePart(date.getHours())}:${padDatePart(date.getMinutes())}`;
+}
+
+function formatDateTimeLabel(value) {
+  const date = parseDate(value);
+  if (!date) return "";
+  const today = new Date();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+
+  let dayLabel;
+  if (isSameLocalDate(date, today)) {
+    dayLabel = "今天";
+  } else if (isSameLocalDate(date, tomorrow)) {
+    dayLabel = "明天";
+  } else if (isSameLocalDate(date, yesterday)) {
+    dayLabel = "昨天";
+  } else if (date.getFullYear() === today.getFullYear()) {
+    dayLabel = `${date.getMonth() + 1}月${date.getDate()}日`;
+  } else {
+    dayLabel = `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+  }
+  return `${dayLabel} ${formatClock(date)}`;
+}
+
+function dueDateInfo(task, finished) {
+  const date = parseDate(task.due_time);
+  if (!date) return null;
+  const now = new Date();
+  if (finished) {
+    return { tone: "done", label: `截止 ${formatDateTimeLabel(task.due_time)}` };
+  }
+  if (date < now) {
+    return { tone: "overdue", label: `已逾期 ${formatDateTimeLabel(task.due_time)}` };
+  }
+  if (isSameLocalDate(date, now)) {
+    return { tone: "today", label: `今天截止 ${formatClock(date)}` };
+  }
+  return { tone: "upcoming", label: `截止 ${formatDateTimeLabel(task.due_time)}` };
+}
+
+function renderTaskSchedule(task, finished) {
+  const items = [];
+  if (task.start_time) {
+    items.push(`<span class="task-date start">开始 ${escapeHtml(formatDateTimeLabel(task.start_time))}</span>`);
+  }
+  const due = dueDateInfo(task, finished);
+  if (due) {
+    items.push(`<span class="task-date due ${due.tone}">${escapeHtml(due.label)}</span>`);
+  }
+  return items.length ? `<div class="task-schedule">${items.join("")}</div>` : "";
+}
+
+function validateTaskDateRange(startValue, dueValue) {
+  const start = parseDate(startValue);
+  const due = parseDate(dueValue);
+  if (startValue && !start) throw new Error("开始时间格式不正确");
+  if (dueValue && !due) throw new Error("截止时间格式不正确");
+  if (start && due && due < start) throw new Error("截止时间不能早于开始时间");
+}
+
 function isDefaultProject(project) {
   return project?.system_type === "inbox";
 }
@@ -147,6 +250,7 @@ function clearAuth() {
   state.planningState = null;
   state.agentPendingMessage = null;
   state.agentSending = false;
+  state.collapsedTaskIds.clear();
   localStorage.removeItem("planwise_token");
   localStorage.removeItem("planwise_user");
 }
@@ -257,7 +361,7 @@ function renderAgent() {
     ? messageHtml.join("")
     : `
       <div class="agent-empty">
-        <span>✦</span>
+        <span>…</span>
         <strong>从一个目标开始</strong>
         <p>不需要一次说清楚全部信息，Agent 会逐轮询问。</p>
       </div>
@@ -403,6 +507,7 @@ async function selectProject(id) {
   const all = [...state.projects, ...state.archivedProjects];
   state.selectedProject = all.find((project) => project.project_id === Number(id)) || null;
   state.showArchivedTasks = false;
+  state.collapsedTaskIds.clear();
   $("toggleArchivedTasksButton").textContent = "查看归档任务";
   $("toggleArchivedTasksButton").classList.remove("active");
   renderProjects(Boolean(state.selectedProject?.archived_time));
@@ -450,19 +555,56 @@ function renderTaskTree(tasks) {
   });
   children.forEach((items) => items.sort((a, b) => a.sort_order - b.sort_order || a.task_id - b.task_id));
 
+  const statsCache = new Map();
+  function descendantStats(taskId, ancestors = new Set()) {
+    if (statsCache.has(taskId)) return statsCache.get(taskId);
+    if (ancestors.has(taskId)) return { total: 0, done: 0 };
+    const nextAncestors = new Set(ancestors);
+    nextAncestors.add(taskId);
+
+    const result = (children.get(taskId) || []).reduce((stats, child) => {
+      const nested = descendantStats(child.task_id, nextAncestors);
+      return {
+        total: stats.total + 1 + nested.total,
+        done: stats.done + (["done", "cancelled"].includes(child.status) ? 1 : 0) + nested.done,
+      };
+    }, { total: 0, done: 0 });
+    statsCache.set(taskId, result);
+    return result;
+  }
+
   const visited = new Set();
   function walk(parentId, depth) {
     return (children.get(parentId) || []).map((task) => {
       if (visited.has(task.task_id)) return "";
       visited.add(task.task_id);
-      const done = task.status === "done";
+      const checkDone = task.status === "done";
+      const finished = ["done", "cancelled"].includes(task.status);
+      const childTasks = children.get(task.task_id) || [];
+      const hasChildren = childTasks.length > 0;
+      const collapsed = hasChildren && state.collapsedTaskIds.has(task.task_id);
+      const stats = hasChildren ? descendantStats(task.task_id) : null;
+      const safeDepth = Math.min(depth, 6);
+      const indent = safeDepth * 28;
+      const branchLeft = 23 + Math.max(safeDepth - 1, 0) * 28 + 18;
       return `
-        <article class="task-row ${done ? "done" : ""}" style="--depth:${Math.min(depth, 6)}">
-          <button class="task-check ${done ? "done" : ""}" data-complete-task="${task.task_id}" type="button" aria-label="${done ? "重新打开" : "完成任务"}" ${state.showArchivedTasks ? "disabled" : ""}>✓</button>
+        <article class="task-row ${finished ? "done" : ""} ${depth ? "is-child" : ""} ${hasChildren ? "has-children" : ""} ${collapsed ? "collapsed" : ""}" style="--depth:${safeDepth}; --indent:${indent}px; --branch-left:${branchLeft}px">
+          <div class="task-leading">
+            ${hasChildren ? `
+              <button class="task-disclosure" data-toggle-children="${task.task_id}" type="button" aria-label="${collapsed ? "展开子任务" : "收起子任务"}" aria-expanded="${!collapsed}">
+                ${collapsed ? "›" : "⌄"}
+              </button>
+            ` : `<span class="task-disclosure-placeholder" aria-hidden="true"></span>`}
+            <button class="task-check ${checkDone ? "done" : ""}" data-complete-task="${task.task_id}" type="button" aria-label="${finished ? "重新打开" : "完成任务"}" ${state.showArchivedTasks ? "disabled" : ""}>✓</button>
+          </div>
           <div class="task-copy">
-            <div class="task-title">${escapeHtml(task.title)}</div>
+            <div class="task-title-row">
+              <div class="task-title">${escapeHtml(task.title)}</div>
+              ${hasChildren ? `<span class="task-progress">${stats.done}/${stats.total}</span>` : ""}
+            </div>
             ${task.description ? `<p class="task-description">${escapeHtml(task.description)}</p>` : ""}
             ${task.acceptance_criteria ? `<p class="task-criteria"><strong>完成标准：</strong>${escapeHtml(task.acceptance_criteria)}</p>` : ""}
+            ${renderTaskSchedule(task, finished)}
             <div class="task-tags">
               <span class="pill priority-${task.priority}">${TASK_PRIORITY_LABELS[task.priority] || escapeHtml(task.priority)}</span>
               <span class="pill">${TASK_STATUS_LABELS[task.status]}</span>
@@ -479,7 +621,7 @@ function renderTaskTree(tasks) {
             `}
           </div>
         </article>
-        ${walk(task.task_id, depth + 1)}
+        ${collapsed ? "" : walk(task.task_id, depth + 1)}
       `;
     }).join("");
   }
@@ -529,6 +671,8 @@ function openTaskForm(parentTask = null, editingTask = null) {
     $("taskSubmitButton").textContent = "保存修改";
     $("taskTitle").value = editingTask.title;
     $("taskPriority").value = editingTask.priority;
+    $("taskStartTime").value = dateToDatetimeLocalValue(editingTask.start_time);
+    $("taskDueTime").value = dateToDatetimeLocalValue(editingTask.due_time);
     $("taskDescription").value = editingTask.description || "";
     $("taskCriteria").value = editingTask.acceptance_criteria || "";
   }
@@ -702,6 +846,7 @@ $("archiveNavButton").addEventListener("click", () => {
   const showingArchived = !state.selectedProject?.archived_time;
   if (showingArchived && state.archivedProjects.length) {
     state.selectedProject = state.archivedProjects[0];
+    state.collapsedTaskIds.clear();
     renderProjects(true);
     renderProjectHeader();
     loadTasks().catch((error) => showToast(error.message));
@@ -710,6 +855,7 @@ $("archiveNavButton").addEventListener("click", () => {
       state.projects.find(isDefaultProject)
       || state.projects[0]
       || null;
+    state.collapsedTaskIds.clear();
     renderProjects(false);
     renderProjectHeader();
     loadTasks().catch((error) => showToast(error.message));
@@ -801,11 +947,16 @@ $("taskForm").addEventListener("submit", async (event) => {
   $("taskError").textContent = "";
   $("taskSubmitButton").disabled = true;
   try {
+    const startTime = $("taskStartTime").value;
+    const dueTime = $("taskDueTime").value;
+    validateTaskDateRange(startTime, dueTime);
     const taskData = {
       title: $("taskTitle").value.trim(),
       description: $("taskDescription").value.trim() || null,
       acceptance_criteria: $("taskCriteria").value.trim() || null,
       priority: $("taskPriority").value,
+      start_time: datetimeLocalToApi(startTime),
+      due_time: datetimeLocalToApi(dueTime),
     };
     if (state.editingTask) {
       await api(`/api/tasks/${state.editingTask.task_id}`, {
@@ -865,6 +1016,18 @@ $("taskList").addEventListener("change", async (event) => {
 });
 
 $("taskList").addEventListener("click", async (event) => {
+  const toggleButton = event.target.closest("[data-toggle-children]");
+  if (toggleButton) {
+    const taskId = Number(toggleButton.dataset.toggleChildren);
+    if (state.collapsedTaskIds.has(taskId)) {
+      state.collapsedTaskIds.delete(taskId);
+    } else {
+      state.collapsedTaskIds.add(taskId);
+    }
+    renderTasks();
+    return;
+  }
+
   const completeButton = event.target.closest("[data-complete-task]");
   const editButton = event.target.closest("[data-edit-task]");
   const childButton = event.target.closest("[data-child-task]");
