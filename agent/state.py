@@ -28,7 +28,8 @@ class Action(StrEnum):
 
 
 class AvailableTool(StrEnum):
-    ...
+    LIST_USER_PROJECTS = auto()
+    GET_PROJECT_TASK_TREE = auto()
 
 
 class ToolCall(BaseModel):

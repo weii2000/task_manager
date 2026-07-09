@@ -5,6 +5,7 @@ import pytest
 
 from agent.flow import Flow
 from agent.state import Action, Message, MessageRole, PlanningDraft, PlanningInfo, ResponseMessage, State
+from agent.tools.base import ToolContext
 from exceptions.agent import AgentFlowStepLimitExceededError
 
 
@@ -14,6 +15,10 @@ def make_state() -> State:
         info=PlanningInfo(),
         draft=PlanningDraft(),
     )
+
+
+def make_context() -> ToolContext:
+    return ToolContext(user_id=1, db=AsyncMock())
 
 
 def test_flow_stops_after_clarify():
@@ -29,7 +34,7 @@ def test_flow_stops_after_clarify():
     provider.complete = AsyncMock(return_value=response_state)
     flow = Flow(provider=provider)
 
-    result_state, response = asyncio.run(flow.run(make_state()))
+    result_state, response = asyncio.run(flow.run(make_state(), make_context()))
 
     assert result_state is response_state
     assert response == "你的目标是什么？"
@@ -51,4 +56,4 @@ def test_flow_raises_when_step_limit_exceeded():
     flow.clarify_node - Action.CLARIFY.value >> flow.clarify_node  # pyright: ignore[reportUnusedExpression]
 
     with pytest.raises(AgentFlowStepLimitExceededError):
-        asyncio.run(flow.run(make_state()))
+        asyncio.run(flow.run(make_state(), make_context()))

@@ -79,11 +79,13 @@ async def get_projects_for_user(
     user_id: int,
     db: AsyncSession,
     archived: bool = False,
+    keyword: str | None = None,
 ) -> list[ProjectRead]:
     projects = await get_projects_by_owner_user_id(
         user_id,
         db,
         archived,
+        keyword,
     )
     return [ProjectRead.model_validate(project) for project in projects]
 

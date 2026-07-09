@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.enums import ProjectSystemType
@@ -34,18 +34,33 @@ async def get_projects_by_owner_user_id(
     owner_user_id: int,
     db: AsyncSession,
     archived: bool = False,
+    keyword: str | None = None,
 ) -> list[Project]:
     archive_condition = (
         Project.archived_time.is_not(None)
         if archived
         else Project.archived_time.is_(None)
     )
+    conditions = [
+        Project.owner_user_id == owner_user_id,
+        archive_condition,
+    ]
+
+    if keyword:
+        normalized_keyword = keyword.strip()
+        if normalized_keyword:
+            pattern = f"%{normalized_keyword}%"
+            conditions.append(
+                or_(
+                    Project.title.ilike(pattern),
+                    Project.description.ilike(pattern),
+                    Project.goal.ilike(pattern),
+                )
+            )
+
     result = await db.execute(
         select(Project)
-        .where(
-            Project.owner_user_id == owner_user_id,
-            archive_condition,
-        )
+        .where(*conditions)
         .order_by(Project.created_time.desc())
     )
     return list(result.scalars().all())

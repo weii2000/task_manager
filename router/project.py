@@ -52,6 +52,7 @@ async def create_project_api(
 @router.get("", response_model=ApiResponse[list[ProjectRead]])
 async def get_projects_api(
     archived: bool = False,
+    keyword: str | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -59,6 +60,7 @@ async def get_projects_api(
         current_user.user_id,
         db,
         archived,
+        keyword,
     )
     return ApiResponse[list[ProjectRead]](
         message="项目列表获取成功",

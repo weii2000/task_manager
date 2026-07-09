@@ -80,6 +80,7 @@ def test_get_projects_passes_archive_filter(
         fake_user.user_id,
         fake_db,
         True,
+        None,
     )
 
 

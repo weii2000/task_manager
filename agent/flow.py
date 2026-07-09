@@ -1,6 +1,7 @@
-from agent.node import ClarifyNode, Node, ThinkNode
+from agent.node import ClarifyNode, Node, ThinkNode, ToolNode
 from agent.provider import LLMProvider, OpenAICompatibleLLMProvider
 from agent.state import Action, Message, MessageRole, PlanningDraft, PlanningInfo, State
+from agent.tools.base import ToolContext
 from exceptions.agent import AgentFlowStepLimitExceededError
 
 
@@ -9,11 +10,14 @@ class Flow:
         self.max_steps = max_steps
         self.think_node = ThinkNode(provider)
         self.clarify_node = ClarifyNode()
+        self.tool_node = ToolNode()
 
         self.think_node - Action.CLARIFY.value >> self.clarify_node # pyright: ignore[reportUnusedExpression]
         self.clarify_node - Action.THINK.value >> self.think_node # pyright: ignore[reportUnusedExpression]
+        self.think_node - Action.USE_TOOL.value >> self.tool_node # pyright: ignore[reportUnusedExpression]
+        self.tool_node - Action.THINK.value >> self.think_node # pyright: ignore[reportUnusedExpression]
 
-    async def run(self, state: State) -> tuple[State, str]:
+    async def run(self, state: State, context: ToolContext) -> tuple[State, str]:
         cur = self.think_node
         steps = 0
 
@@ -21,7 +25,7 @@ class Flow:
             if steps >= self.max_steps:
                 raise AgentFlowStepLimitExceededError()
 
-            state = await cur.exec(state)
+            state = await cur.exec(state, context)
             steps += 1
             cur = cur.successors.get(getattr(state.messages[-1], "next_action", Action.THINK).value, None)
 
