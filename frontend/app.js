@@ -216,6 +216,9 @@ function createPlanningState() {
     draft: {
       tasks: [],
     },
+    next_action: "think",
+    pending_tool_calls: [],
+    tool_results: [],
   };
 }
 
@@ -350,10 +353,8 @@ function agentMessageLabel(role) {
 }
 
 function getAgentPhase(planningState) {
-  const messages = planningState.messages || [];
-  const lastAssistantMessage = [...messages].reverse().find((message) => message.role === "assistant");
-  if (lastAssistantMessage?.next_action === "finish") return "草稿已生成";
-  if (lastAssistantMessage?.next_action === "use_tool") return "查询中";
+  if (planningState.next_action === "finish") return "草稿已生成";
+  if (planningState.next_action === "use_tool") return "查询中";
   return "澄清中";
 }
 

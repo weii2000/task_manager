@@ -10,6 +10,8 @@ from urllib.request import Request, urlopen
 
 
 FRONTEND_DIR = Path(__file__).resolve().parent
+DEFAULT_API_TIMEOUT_SECONDS = 15
+AGENT_API_TIMEOUT_SECONDS = 60
 
 
 class FrontendHandler(SimpleHTTPRequestHandler):
@@ -53,9 +55,14 @@ class FrontendHandler(SimpleHTTPRequestHandler):
             headers=headers,
             method=self.command,
         )
+        timeout = (
+            AGENT_API_TIMEOUT_SECONDS
+            if self.path.startswith("/api/agent/")
+            else DEFAULT_API_TIMEOUT_SECONDS
+        )
 
         try:
-            with urlopen(request, timeout=15) as response:
+            with urlopen(request, timeout=timeout) as response:
                 self._relay(response.status, response.headers, response.read())
         except HTTPError as error:
             self._relay(error.code, error.headers, error.read())
