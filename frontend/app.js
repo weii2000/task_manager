@@ -11,6 +11,7 @@ const state = {
   collapsedTaskIds: new Set(),
   parentTask: null,
   editingTask: null,
+  agentSessionId: null,
   planningState: null,
   agentPendingMessage: null,
   agentSending: false,
@@ -206,13 +207,15 @@ function isDefaultProject(project) {
 function createPlanningState() {
   return {
     messages: [],
+    available_tools: [],
     info: {
       goal: null,
       constraints: null,
-      completion_criteria: null,
+      acceptance_criteria: null,
     },
-    phase: "clarifying",
-    draft: null,
+    draft: {
+      tasks: [],
+    },
   };
 }
 
@@ -247,6 +250,7 @@ function persistAuth(payload) {
 function clearAuth() {
   state.token = null;
   state.user = null;
+  state.agentSessionId = null;
   state.planningState = null;
   state.agentPendingMessage = null;
   state.agentSending = false;
@@ -334,12 +338,48 @@ function renderAgentList(values, emptyText = "尚未确认") {
   return `<ul>${values.map((value) => `<li>${escapeHtml(value)}</li>`).join("")}</ul>`;
 }
 
+function renderAgentText(value, emptyText = "尚未确认") {
+  if (value === null || value === undefined || value === "") return escapeHtml(emptyText);
+  return escapeHtml(value);
+}
+
+function agentMessageLabel(role) {
+  if (role === "user") return "你";
+  if (role === "tool") return "工具";
+  return "Agent";
+}
+
+function getAgentPhase(planningState) {
+  const messages = planningState.messages || [];
+  const lastAssistantMessage = [...messages].reverse().find((message) => message.role === "assistant");
+  if (lastAssistantMessage?.next_action === "finish") return "草稿已生成";
+  if (lastAssistantMessage?.next_action === "use_tool") return "查询中";
+  return "澄清中";
+}
+
+function renderAgentTaskList(tasks = []) {
+  return tasks.map((task) => `
+    <li>
+      <strong>${escapeHtml(task.title)}</strong>
+      ${task.description ? `<p>${escapeHtml(task.description)}</p>` : ""}
+      ${task.start_time ? `<small>开始：${escapeHtml(formatDateTimeLabel(task.start_time))}</small>` : ""}
+      ${task.due_time ? `<small>截止：${escapeHtml(formatDateTimeLabel(task.due_time))}</small>` : ""}
+      ${task.subtasks?.length ? `<ol>${renderAgentTaskList(task.subtasks)}</ol>` : ""}
+    </li>
+  `).join("");
+}
+
+function applyAgentTurnResult(result) {
+  state.agentSessionId = result.session.session_id;
+  state.planningState = result.session.state || createPlanningState();
+}
+
 function renderAgent() {
   const planningState = state.planningState || createPlanningState();
   const messages = planningState.messages || [];
   const messageHtml = messages.map((message) => `
     <article class="agent-message ${message.role}">
-      <span>${message.role === "user" ? "你" : "Agent"}</span>
+      <span>${agentMessageLabel(message.role)}</span>
       <p>${escapeHtml(message.content).replaceAll("\n", "<br>")}</p>
     </article>
   `);
@@ -370,22 +410,20 @@ function renderAgent() {
   const info = planningState.info || {};
   $("agentGoal").textContent = info.goal || "尚未确认";
   $("agentConstraints").innerHTML = renderAgentList(info.constraints);
-  $("agentCriteria").innerHTML = renderAgentList(info.completion_criteria);
+  $("agentCriteria").innerHTML = renderAgentText(info.acceptance_criteria);
   $("agentMessageCount").textContent = `${messages.length} 条消息`;
-  $("agentPhase").textContent = planningState.phase === "draft_ready" ? "草稿已生成" : "澄清中";
-  $("agentPhase").classList.toggle("ready", planningState.phase === "draft_ready");
+  const phase = getAgentPhase(planningState);
+  $("agentPhase").textContent = phase;
+  $("agentPhase").classList.toggle("ready", phase === "草稿已生成");
 
   const draft = planningState.draft;
-  $("agentDraftCard").classList.toggle("hidden", !draft);
+  const draftTasks = draft?.tasks || [];
+  $("agentDraftCard").classList.toggle("hidden", draftTasks.length === 0);
   if (draft) {
-    $("agentDraftSummary").textContent = draft.summary;
-    $("agentDraftTasks").innerHTML = draft.tasks.map((task) => `
-      <li>
-        <strong>${escapeHtml(task.title)}</strong>
-        ${task.description ? `<p>${escapeHtml(task.description)}</p>` : ""}
-        <small>完成标准：${escapeHtml(task.acceptance_criteria)}</small>
-      </li>
-    `).join("");
+    $("agentDraftSummary").textContent = draftTasks.length
+      ? `当前草稿包含 ${draftTasks.length} 个顶层任务。`
+      : "";
+    $("agentDraftTasks").innerHTML = renderAgentTaskList(draftTasks);
   }
 
   $("agentStateJson").textContent = JSON.stringify(planningState, null, 2);
@@ -405,6 +443,7 @@ function openAgentDialog() {
 }
 
 function resetAgentSession() {
+  state.agentSessionId = null;
   state.planningState = createPlanningState();
   state.agentPendingMessage = null;
   $("agentMessage").value = "";
@@ -789,13 +828,16 @@ $("agentForm").addEventListener("submit", async (event) => {
   renderAgent();
 
   try {
-    state.planningState = await api("/api/agent/planning/turn", {
-      method: "POST",
-      body: JSON.stringify({
-        message,
-        state: state.planningState,
-      }),
-    });
+    const result = state.agentSessionId
+      ? await api(`/api/agent/?session_id=${encodeURIComponent(state.agentSessionId)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ message }),
+      })
+      : await api("/api/agent/", {
+        method: "POST",
+        body: JSON.stringify({ message }),
+      });
+    applyAgentTurnResult(result);
     $("agentMessage").value = "";
     $("agentCharacterCount").textContent = "0 / 5000";
   } catch (error) {

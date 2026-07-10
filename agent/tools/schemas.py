@@ -1,9 +1,21 @@
 from __future__ import annotations
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from models.enums import ProjectStatus, TaskPriority, TaskStatus
+
+
+class ToolInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class ListUserProjectsInput(ToolInput):
+    keyword: str | None = Field(default=None, max_length=200)
+
+
+class GetProjectTaskTreeInput(ToolInput):
+    project_id: int = Field(gt=0)
 
 
 class AgentProjectRead(BaseModel):
@@ -16,6 +28,8 @@ class AgentProjectRead(BaseModel):
     due_time: datetime | None
     completed_time: datetime | None
 
+    model_config = ConfigDict(from_attributes=True)
+
 
 class AgentTaskRead(BaseModel):
     task_id: int
@@ -25,7 +39,9 @@ class AgentTaskRead(BaseModel):
     acceptance_criteria: str | None = None
     children: list[AgentTaskRead] = Field(default_factory=list)
 
+    model_config = ConfigDict(from_attributes=True)
+
 
 class AgentProjectOverview(BaseModel):
-    project_id: int | None
+    project_id: int
     task_tree: list[AgentTaskRead]

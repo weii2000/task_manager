@@ -1,5 +1,5 @@
 from agent.flow import Flow
-from agent.state import Message, MessageRole, PlanningDraft, PlanningInfo, State
+from agent.state import Action, Message, MessageRole, PlanningDraft, PlanningInfo, State
 from agent.tools.base import ToolContext
 from crud.agent import get_agent_session_by_session_id_and_user_id, save_agent_session, update_agent_session_by_session_id_and_user_id
 from exceptions.agent import AgentSessionNotFoundError
@@ -31,6 +31,8 @@ async def resume_agent_session_by_session_id_for_user(
             raise AgentSessionNotFoundError()
         state = State.model_validate_json(agent_session.state_json)
         state.messages.append(Message(role=MessageRole.USER, content=request.message))
+        state.next_action = Action.THINK
+        state.pending_tool_calls = []
         context = ToolContext(user_id, db)
         response_state, response = await flow.run(state, context)
         agent_session = await update_agent_session_by_session_id_and_user_id(session_id, user_id, response_state.model_dump_json(), db)

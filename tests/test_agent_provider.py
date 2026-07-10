@@ -5,8 +5,9 @@ from unittest.mock import AsyncMock
 from openai import OpenAIError
 import pytest
 
+from agent.llm import LLMMessage, LLMRequest
 from agent.provider import OpenAICompatibleLLMProvider
-from agent.state import Message, MessageRole, PlanningDraft, PlanningInfo, ResponseMessage, State
+from agent.state import Action, AgentDecision
 from exceptions.agent import AgentProviderError, AgentResponseFormatError
 
 
@@ -33,11 +34,9 @@ def make_provider_with_response(content: str | None) -> OpenAICompatibleLLMProvi
     return provider
 
 
-def make_state() -> State:
-    return State(
-        messages=[Message(role=MessageRole.USER, content="帮我规划学习")],
-        info=PlanningInfo(),
-        draft=PlanningDraft(),
+def make_request() -> LLMRequest:
+    return LLMRequest(
+        messages=[LLMMessage(role="user", content="帮我规划学习")]
     )
 
 
@@ -45,14 +44,14 @@ def test_provider_rejects_non_json_response():
     provider = make_provider_with_response("不是 JSON")
 
     with pytest.raises(AgentResponseFormatError):
-        asyncio.run(provider.complete(make_state()))
+        asyncio.run(provider.complete(make_request(), AgentDecision))
 
 
 def test_provider_rejects_empty_response_content():
     provider = make_provider_with_response(None)
 
     with pytest.raises(AgentResponseFormatError):
-        asyncio.run(provider.complete(make_state()))
+        asyncio.run(provider.complete(make_request(), AgentDecision))
 
 
 def test_provider_parses_valid_response():
@@ -74,11 +73,11 @@ def test_provider_parses_valid_response():
         """
     )
 
-    result = asyncio.run(provider.complete(make_state()))
+    result = asyncio.run(provider.complete(make_request(), AgentDecision))
 
-    assert isinstance(result.messages[-1], ResponseMessage)
-    assert result.messages[-1].content == "你的目标是什么？"
-    assert result.messages[-1].next_action == "clarify"
+    assert isinstance(result, AgentDecision)
+    assert result.content == "你的目标是什么？"
+    assert result.next_action == Action.CLARIFY
 
 
 def test_provider_converts_openai_error():
@@ -88,4 +87,4 @@ def test_provider_converts_openai_error():
     )
 
     with pytest.raises(AgentProviderError):
-        asyncio.run(provider.complete(make_state()))
+        asyncio.run(provider.complete(make_request(), AgentDecision))
