@@ -60,8 +60,8 @@ class AgentDecision(BaseModel):
     content: str = Field(min_length=1, max_length=5000)
     next_action: Action
     tool_calls: list[ToolCall] = Field(default_factory=list)
-    info: PlanningInfo
-    draft: PlanningDraft
+    info: PlanningInfo = Field(default_factory=PlanningInfo)
+    draft: PlanningDraft = Field(default_factory=PlanningDraft)
 
     @model_validator(mode="after")
     def validate_tool_calls_match_action(self) -> AgentDecision:

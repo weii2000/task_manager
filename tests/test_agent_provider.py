@@ -78,6 +78,29 @@ def test_provider_parses_valid_response():
     assert isinstance(result, AgentDecision)
     assert result.content == "你的目标是什么？"
     assert result.next_action == Action.CLARIFY
+    assert (
+        provider._client.chat.completions.create.await_args.kwargs[
+            "response_format"
+        ]
+        == {"type": "json_object"}
+    )
+
+
+def test_provider_accepts_response_without_optional_state_fields():
+    provider = make_provider_with_response(
+        """
+        {
+          "content": "你的目标是什么？",
+          "next_action": "clarify",
+          "tool_calls": []
+        }
+        """
+    )
+
+    result = asyncio.run(provider.complete(make_request(), AgentDecision))
+
+    assert result.info.goal is None
+    assert result.draft.tasks == []
 
 
 def test_provider_converts_openai_error():

@@ -58,12 +58,13 @@ class ThinkNode(Node):
             raise AgentResponseFormatError()
 
         new_state = state.model_copy(deep=True)
-        new_state.messages.append(
-            Message(
-                role=MessageRole.ASSISTANT,
-                content=decision.content,
+        if decision.next_action in {Action.CLARIFY, Action.FINISH}:
+            new_state.messages.append(
+                Message(
+                    role=MessageRole.ASSISTANT,
+                    content=decision.content,
+                )
             )
-        )
         new_state.info = decision.info
         new_state.draft = decision.draft
         new_state.next_action = decision.next_action
