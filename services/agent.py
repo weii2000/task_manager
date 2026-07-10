@@ -1,41 +1,144 @@
-from agent.flow import Flow
-from agent.state import Action, Message, MessageRole, PlanningDraft, PlanningInfo, State
-from agent.tools.base import ToolContext
-from crud.agent import get_agent_session_by_session_id_and_user_id, save_agent_session, update_agent_session_by_session_id_and_user_id
-from exceptions.agent import AgentSessionNotFoundError
-from models.agent import AgentSession
-from schemas.agent import AgentTurnRequest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent.flow import Flow
+from agent.state import (
+    Action,
+    AgentPhase,
+    HumanDecision,
+    Message,
+    MessageRole,
+    State,
+)
+from agent.tools.base import ToolContext
+from crud.agent import (
+    get_agent_session_by_session_id_and_user_id,
+    save_agent_session,
+    update_agent_session_by_session_id_and_user_id,
+)
+from exceptions.agent import (
+    AgentSessionNotAcceptingTurnError,
+    AgentSessionNotAwaitingConfirmationError,
+    AgentSessionNotFoundError,
+)
+from models.agent import AgentSession
+from schemas.agent import AgentConfirmRequest, AgentTurnRequest
 
-async def create_agent_session_for_user(request: AgentTurnRequest, user_id: int, db: AsyncSession, flow: Flow) -> tuple[AgentSession, str]:
-    messages = [Message(role=MessageRole.USER, content=request.message)]
-    state = State(messages=messages, info=PlanningInfo(), draft=PlanningDraft())
+
+async def create_agent_session_for_user(
+    request: AgentTurnRequest,
+    user_id: int,
+    db: AsyncSession,
+    flow: Flow,
+) -> tuple[AgentSession, str]:
+    state = State(
+        messages=[
+            Message(role=MessageRole.USER, content=request.message)
+        ]
+    )
     context = ToolContext(user_id, db)
     async with db.begin():
         response_state, response = await flow.run(state, context)
-        agent_session = await save_agent_session(user_id, response_state.model_dump_json(), db)
+        agent_session = await save_agent_session(
+            user_id,
+            response_state.model_dump_json(),
+            db,
+        )
     return agent_session, response
 
 
 async def resume_agent_session_by_session_id_for_user(
-        request: AgentTurnRequest, 
-        session_id: int,
-        user_id: int, 
-        db: AsyncSession,
-        flow: Flow
+    request: AgentTurnRequest,
+    session_id: int,
+    user_id: int,
+    db: AsyncSession,
+    flow: Flow,
 ) -> tuple[AgentSession, str]:
     async with db.begin():
-        agent_session = await get_agent_session_by_session_id_and_user_id(session_id, user_id, db)
-        if not agent_session:
+        agent_session = await get_agent_session_by_session_id_and_user_id(
+            session_id,
+            user_id,
+            db,
+        )
+        if agent_session is None:
             raise AgentSessionNotFoundError()
+
         state = State.model_validate_json(agent_session.state_json)
-        state.messages.append(Message(role=MessageRole.USER, content=request.message))
-        state.next_action = Action.THINK
+        if state.phase != AgentPhase.PLANNING:
+            raise AgentSessionNotAcceptingTurnError()
+
+        state.messages.append(
+            Message(role=MessageRole.USER, content=request.message)
+        )
+        state.next_action = Action.PLAN
         state.pending_tool_calls = []
         context = ToolContext(user_id, db)
         response_state, response = await flow.run(state, context)
-        agent_session = await update_agent_session_by_session_id_and_user_id(session_id, user_id, response_state.model_dump_json(), db)
-        if not agent_session:
+        updated_session = (
+            await update_agent_session_by_session_id_and_user_id(
+                session_id,
+                user_id,
+                response_state.model_dump_json(),
+                db,
+            )
+        )
+        if updated_session is None:
             raise AgentSessionNotFoundError()
-    return agent_session, response
+
+    return updated_session, response
+
+
+async def confirm_agent_session_for_user(
+    request: AgentConfirmRequest,
+    session_id: int,
+    user_id: int,
+    db: AsyncSession,
+    flow: Flow,
+) -> tuple[AgentSession, str]:
+    async with db.begin():
+        agent_session = await get_agent_session_by_session_id_and_user_id(
+            session_id,
+            user_id,
+            db,
+        )
+        if agent_session is None:
+            raise AgentSessionNotFoundError()
+
+        state = State.model_validate_json(agent_session.state_json)
+        if state.phase != AgentPhase.AWAITING_CONFIRMATION:
+            raise AgentSessionNotAwaitingConfirmationError()
+
+        state.human_decision = HumanDecision.model_validate(
+            request.model_dump()
+        )
+        if request.approved:
+            response = "计划已确认，当前已进入待执行状态。"
+            state.messages.append(
+                Message(role=MessageRole.ASSISTANT, content=response)
+            )
+            state.phase = AgentPhase.READY_TO_EXECUTE
+            state.next_action = Action.READY_TO_EXECUTE
+            response_state = state
+        else:
+            feedback = (request.feedback or "").strip()
+            state.messages.append(
+                Message(role=MessageRole.USER, content=feedback)
+            )
+            state.phase = AgentPhase.PLANNING
+            state.next_action = Action.PLAN
+            state.pending_tool_calls = []
+            state.revision_count += 1
+            context = ToolContext(user_id, db)
+            response_state, response = await flow.run(state, context)
+
+        updated_session = (
+            await update_agent_session_by_session_id_and_user_id(
+                session_id,
+                user_id,
+                response_state.model_dump_json(),
+                db,
+            )
+        )
+        if updated_session is None:
+            raise AgentSessionNotFoundError()
+
+    return updated_session, response

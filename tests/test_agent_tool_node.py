@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 from agent.node import ToolNode
 from agent.state import (
     Action,
+    AgentPhase,
     AvailableTool,
     Message,
     MessageRole,
@@ -37,13 +38,19 @@ def test_tool_node_validates_arguments_before_handler():
     )
 
     try:
-        result = asyncio.run(ToolNode().exec(state, make_context()))
+        result = asyncio.run(
+            ToolNode(
+                return_action=Action.PLAN,
+                phase=AgentPhase.PLANNING,
+            ).exec(state, make_context())
+        )
     finally:
         object.__setattr__(definition, "handler", original_handler)
 
     handler.assert_not_awaited()
     assert result.pending_tool_calls == []
-    assert result.next_action == Action.THINK
+    assert result.next_action == Action.PLAN
+    assert result.tool_results[0].phase == AgentPhase.PLANNING
     assert result.tool_results[0].status == ToolResultStatus.ERROR
     assert result.tool_results[0].error is not None
     assert result.tool_results[0].error.code == "invalid_tool_arguments"
@@ -69,7 +76,12 @@ def test_tool_node_records_successful_result():
     )
 
     try:
-        result = asyncio.run(ToolNode().exec(state, make_context()))
+        result = asyncio.run(
+            ToolNode(
+                return_action=Action.REVIEW,
+                phase=AgentPhase.REVIEWING,
+            ).exec(state, make_context())
+        )
     finally:
         object.__setattr__(definition, "handler", original_handler)
 
@@ -77,6 +89,8 @@ def test_tool_node_records_successful_result():
     arguments = handler.await_args.args[1]
     assert arguments.project_id == 42
     assert result.tool_results[0].status == ToolResultStatus.SUCCESS
+    assert result.next_action == Action.REVIEW
+    assert result.tool_results[0].phase == AgentPhase.REVIEWING
     assert result.tool_results[0].output == {
         "project_id": 42,
         "task_tree": [],

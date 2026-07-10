@@ -7,7 +7,7 @@ import pytest
 
 from agent.llm import LLMMessage, LLMRequest
 from agent.provider import OpenAICompatibleLLMProvider
-from agent.state import Action, AgentDecision
+from agent.state import Action, PlanDecision
 from exceptions.agent import AgentProviderError, AgentResponseFormatError
 
 
@@ -44,14 +44,14 @@ def test_provider_rejects_non_json_response():
     provider = make_provider_with_response("不是 JSON")
 
     with pytest.raises(AgentResponseFormatError):
-        asyncio.run(provider.complete(make_request(), AgentDecision))
+        asyncio.run(provider.complete(make_request(), PlanDecision))
 
 
 def test_provider_rejects_empty_response_content():
     provider = make_provider_with_response(None)
 
     with pytest.raises(AgentResponseFormatError):
-        asyncio.run(provider.complete(make_request(), AgentDecision))
+        asyncio.run(provider.complete(make_request(), PlanDecision))
 
 
 def test_provider_parses_valid_response():
@@ -73,9 +73,9 @@ def test_provider_parses_valid_response():
         """
     )
 
-    result = asyncio.run(provider.complete(make_request(), AgentDecision))
+    result = asyncio.run(provider.complete(make_request(), PlanDecision))
 
-    assert isinstance(result, AgentDecision)
+    assert isinstance(result, PlanDecision)
     assert result.content == "你的目标是什么？"
     assert result.next_action == Action.CLARIFY
     assert (
@@ -97,7 +97,7 @@ def test_provider_accepts_response_without_optional_state_fields():
         """
     )
 
-    result = asyncio.run(provider.complete(make_request(), AgentDecision))
+    result = asyncio.run(provider.complete(make_request(), PlanDecision))
 
     assert result.info.goal is None
     assert result.draft.tasks == []
@@ -110,4 +110,4 @@ def test_provider_converts_openai_error():
     )
 
     with pytest.raises(AgentProviderError):
-        asyncio.run(provider.complete(make_request(), AgentDecision))
+        asyncio.run(provider.complete(make_request(), PlanDecision))
