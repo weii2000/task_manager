@@ -229,10 +229,12 @@ function createPlanningState() {
       acceptance_criteria: null,
     },
     draft: {
+      project: null,
       tasks: [],
     },
     review: null,
     human_decision: null,
+    execution: null,
     next_action: "plan",
     pending_tool_calls: [],
     tool_results: [],
@@ -379,12 +381,13 @@ function getAgentPhase(planningState) {
     reviewing: { label: "评审中", tone: "reviewing" },
     awaiting_confirmation: { label: "待确认", tone: "attention" },
     ready_to_execute: { label: "待执行", tone: "ready" },
+    executed: { label: "已创建", tone: "ready" },
   };
   return phases[planningState.phase] || { label: "规划中", tone: "working" };
 }
 
 function isAgentConversationLocked(planningState) {
-  return ["awaiting_confirmation", "ready_to_execute"].includes(planningState.phase);
+  return ["awaiting_confirmation", "ready_to_execute", "executed"].includes(planningState.phase);
 }
 
 function renderAgentReviewFindings(findings = []) {
@@ -412,6 +415,8 @@ function renderAgentTaskList(tasks = []) {
     <li>
       <strong>${escapeHtml(task.title)}</strong>
       ${task.description ? `<p>${escapeHtml(task.description)}</p>` : ""}
+      ${task.acceptance_criteria ? `<small>完成标准：${escapeHtml(task.acceptance_criteria)}</small>` : ""}
+      <small>优先级：${escapeHtml(TASK_PRIORITY_LABELS[task.priority] || task.priority || "低")}</small>
       ${task.start_time ? `<small>开始：${escapeHtml(formatDateTimeLabel(task.start_time))}</small>` : ""}
       ${task.due_time ? `<small>截止：${escapeHtml(formatDateTimeLabel(task.due_time))}</small>` : ""}
       ${task.subtasks?.length ? `<ol>${renderAgentTaskList(task.subtasks)}</ol>` : ""}
@@ -420,10 +425,26 @@ function renderAgentTaskList(tasks = []) {
 }
 
 function applyAgentTurnResult(result) {
+  if (!result?.session || !result.session.state) {
+    throw new Error("Agent 返回的数据不完整，请稍后重试");
+  }
   state.agentSessionId = result.session.session_id;
-  state.planningState = result.session.state || createPlanningState();
+  state.planningState = result.session.state;
   $("agentConfirmFeedback").value = "";
   $("agentConfirmError").textContent = "";
+}
+
+function getExecutedProjectId(result) {
+  const executionState = result?.session?.state;
+  const projectId = executionState?.execution?.project_id;
+  if (
+    executionState?.phase !== "executed"
+    || !Number.isInteger(projectId)
+    || projectId <= 0
+  ) {
+    throw new Error("项目尚未完成创建，请稍后重试");
+  }
+  return projectId;
 }
 
 function renderAgent() {
@@ -472,8 +493,9 @@ function renderAgent() {
   const draftTasks = draft?.tasks || [];
   $("agentDraftCard").classList.toggle("hidden", draftTasks.length === 0);
   if (draft) {
+    const projectTitle = draft.project?.title;
     $("agentDraftSummary").textContent = draftTasks.length
-      ? `当前草稿包含 ${draftTasks.length} 个顶层任务。`
+      ? `${projectTitle ? `项目“${projectTitle}”，` : ""}包含 ${draftTasks.length} 个顶层任务。`
       : "";
     $("agentDraftTasks").innerHTML = renderAgentTaskList(draftTasks);
   }
@@ -499,7 +521,7 @@ function renderAgent() {
   $("rejectAgentButton").disabled = state.agentSending;
   $("approveAgentButton").disabled = state.agentSending;
   $("rejectAgentButton").textContent = state.agentSending ? "处理中…" : "退回修改";
-  $("approveAgentButton").textContent = state.agentSending ? "处理中…" : "通过计划";
+  $("approveAgentButton").textContent = state.agentSending ? "创建中…" : "通过并创建";
   $("agentMessages").scrollTop = $("agentMessages").scrollHeight;
 }
 
@@ -507,7 +529,7 @@ function focusAgentControl() {
   const phase = state.planningState?.phase;
   if (phase === "awaiting_confirmation") {
     $("approveAgentButton").focus();
-  } else if (phase !== "ready_to_execute") {
+  } else if (!["ready_to_execute", "executed"].includes(phase)) {
     $("agentMessage").focus();
   }
 }
@@ -558,8 +580,20 @@ async function submitAgentConfirmation(approved) {
         }),
       },
     );
+    const projectId = approved ? getExecutedProjectId(result) : null;
     applyAgentTurnResult(result);
-    showToast(approved ? "计划已通过" : "计划已退回并重新评审");
+    if (approved) {
+      try {
+        await loadProjects();
+        await selectProject(projectId);
+        showToast("项目与任务已创建");
+      } catch {
+        showToast("项目已创建，请刷新项目列表");
+      }
+      closeDialog($("agentDialog"));
+    } else {
+      showToast("计划已退回并重新评审");
+    }
   } catch (error) {
     $("agentConfirmError").textContent = error.message;
   } finally {
@@ -660,13 +694,17 @@ function renderProjectHeader() {
 
 async function selectProject(id) {
   const all = [...state.projects, ...state.archivedProjects];
-  state.selectedProject = all.find((project) => project.project_id === Number(id)) || null;
+  const project = all.find((item) => item.project_id === Number(id));
+  if (!project) throw new Error("项目列表中未找到目标项目");
+  state.selectedProject = project;
+  state.tasks = [];
   state.showArchivedTasks = false;
   state.collapsedTaskIds.clear();
   $("toggleArchivedTasksButton").textContent = "查看归档任务";
   $("toggleArchivedTasksButton").classList.remove("active");
   renderProjects(Boolean(state.selectedProject?.archived_time));
   renderProjectHeader();
+  renderTasks();
   await loadTasks();
 }
 

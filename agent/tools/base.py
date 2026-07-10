@@ -7,3 +7,4 @@ from sqlalchemy.ext.asyncio import AsyncSession
 class ToolContext:
     user_id: int
     db: AsyncSession
+    session_id: int | None = None

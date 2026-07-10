@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -7,16 +8,20 @@ import pytest
 from agent.state import (
     Action,
     AgentPhase,
+    ExecutionResult,
     Message,
     MessageRole,
     PlanningDraft,
     PlanningInfo,
+    PlanningProject,
+    PlanningTask,
     State,
 )
 from exceptions.agent import (
     AgentSessionNotAcceptingTurnError,
     AgentSessionNotAwaitingConfirmationError,
     AgentSessionNotFoundError,
+    AgentSessionStateConflictError,
 )
 from schemas.agent import AgentConfirmRequest, AgentTurnRequest
 from services import agent as agent_service
@@ -77,7 +82,7 @@ def test_resume_agent_session_update_not_found_raises(monkeypatch):
     )
     monkeypatch.setattr(
         agent_service,
-        "update_agent_session_by_session_id_and_user_id",
+        "get_agent_session_for_update",
         AsyncMock(return_value=None),
     )
 
@@ -93,6 +98,67 @@ def test_resume_agent_session_update_not_found_raises(monkeypatch):
         )
 
     flow.run.assert_awaited_once()
+
+
+def test_resume_rejects_stale_llm_result(monkeypatch):
+    original_state = State(
+        messages=[Message(role=MessageRole.USER, content="帮我规划学习")]
+    )
+    original_session = SimpleNamespace(
+        session_id=1,
+        state_json=original_state.model_dump_json(),
+    )
+    executed_state = State(
+        messages=[
+            Message(role=MessageRole.USER, content="帮我规划学习"),
+            Message(role=MessageRole.ASSISTANT, content="项目已创建"),
+        ],
+        phase=AgentPhase.EXECUTED,
+        next_action=Action.EXECUTION_COMPLETE,
+        execution=ExecutionResult(
+            project_id=42,
+            project_title="学习计划",
+            created_task_count=1,
+            executed_at=datetime.now(timezone.utc),
+        ),
+    )
+    locked_session = SimpleNamespace(
+        session_id=1,
+        state_json=executed_state.model_dump_json(),
+    )
+    db = make_db_with_transaction()
+    flow = MagicMock()
+    flow.run = AsyncMock(return_value=(original_state, "规划完成"))
+    update_session = AsyncMock()
+
+    monkeypatch.setattr(
+        agent_service,
+        "get_agent_session_by_session_id_and_user_id",
+        AsyncMock(return_value=original_session),
+    )
+    monkeypatch.setattr(
+        agent_service,
+        "get_agent_session_for_update",
+        AsyncMock(return_value=locked_session),
+    )
+    monkeypatch.setattr(
+        agent_service,
+        "update_agent_session_state",
+        update_session,
+    )
+
+    with pytest.raises(AgentSessionStateConflictError):
+        asyncio.run(
+            agent_service.resume_agent_session_by_session_id_for_user(
+                AgentTurnRequest(message="继续规划"),
+                session_id=1,
+                user_id=1,
+                db=db,
+                flow=flow,
+            )
+        )
+
+    update_session.assert_not_awaited()
 
 
 def test_resume_rejects_message_while_awaiting_confirmation(monkeypatch):
@@ -129,7 +195,7 @@ def test_resume_rejects_message_while_awaiting_confirmation(monkeypatch):
     flow.run.assert_not_awaited()
 
 
-def test_confirm_approved_marks_session_ready_to_execute(monkeypatch):
+def test_confirm_approved_executes_plan(monkeypatch):
     state = State(
         messages=[
             Message(role=MessageRole.USER, content="帮我规划学习"),
@@ -137,6 +203,10 @@ def test_confirm_approved_marks_session_ready_to_execute(monkeypatch):
         ],
         phase=AgentPhase.AWAITING_CONFIRMATION,
         next_action=Action.PAUSE,
+        draft=PlanningDraft(
+            project=PlanningProject(title="学习计划"),
+            tasks=[PlanningTask(title="完成第一阶段学习")],
+        ),
     )
     agent_session = SimpleNamespace(
         session_id=1,
@@ -144,28 +214,46 @@ def test_confirm_approved_marks_session_ready_to_execute(monkeypatch):
     )
     db = make_db_with_transaction()
     flow = MagicMock()
-    flow.run = AsyncMock()
+    execution = ExecutionResult(
+        project_id=42,
+        project_title="学习计划",
+        created_task_count=1,
+        executed_at=datetime.now(timezone.utc),
+    )
+
+    async def run_flow(execution_state, context):
+        assert context.user_id == 1
+        assert context.session_id == agent_session.session_id
+        assert execution_state.phase == AgentPhase.READY_TO_EXECUTE
+        assert execution_state.next_action == Action.EXECUTE
+        execution_state.phase = AgentPhase.EXECUTED
+        execution_state.next_action = Action.EXECUTION_COMPLETE
+        execution_state.execution = execution
+        execution_state.messages.append(
+            Message(role=MessageRole.ASSISTANT, content="项目已创建")
+        )
+        return execution_state, "项目已创建"
+
+    flow.run = AsyncMock(side_effect=run_flow)
 
     async def update_session(
-        session_id,
-        user_id,
+        locked_session,
         new_state_json,
         update_db,
     ):
-        assert session_id == agent_session.session_id
-        assert user_id == 1
+        assert locked_session is agent_session
         assert update_db is db
         agent_session.state_json = new_state_json
         return agent_session
 
     monkeypatch.setattr(
         agent_service,
-        "get_agent_session_by_session_id_and_user_id",
+        "get_agent_session_for_update",
         AsyncMock(return_value=agent_session),
     )
     monkeypatch.setattr(
         agent_service,
-        "update_agent_session_by_session_id_and_user_id",
+        "update_agent_session_state",
         update_session,
     )
 
@@ -180,12 +268,13 @@ def test_confirm_approved_marks_session_ready_to_execute(monkeypatch):
     )
 
     updated_state = State.model_validate_json(updated_session.state_json)
-    assert updated_state.phase == AgentPhase.READY_TO_EXECUTE
-    assert updated_state.next_action == Action.READY_TO_EXECUTE
+    assert updated_state.phase == AgentPhase.EXECUTED
+    assert updated_state.next_action == Action.EXECUTION_COMPLETE
     assert updated_state.human_decision is not None
     assert updated_state.human_decision.approved is True
-    assert "待执行状态" in response
-    flow.run.assert_not_awaited()
+    assert updated_state.execution == execution
+    assert response == "项目已创建"
+    flow.run.assert_awaited_once()
 
 
 def test_confirm_rejected_replans_with_feedback(monkeypatch):
@@ -217,22 +306,22 @@ def test_confirm_rejected_replans_with_feedback(monkeypatch):
     flow.run = AsyncMock(side_effect=run_flow)
 
     async def update_session(
-        session_id,
-        user_id,
+        locked_session,
         new_state_json,
         update_db,
     ):
+        assert locked_session is agent_session
         agent_session.state_json = new_state_json
         return agent_session
 
     monkeypatch.setattr(
         agent_service,
-        "get_agent_session_by_session_id_and_user_id",
+        "get_agent_session_for_update",
         AsyncMock(return_value=agent_session),
     )
     monkeypatch.setattr(
         agent_service,
-        "update_agent_session_by_session_id_and_user_id",
+        "update_agent_session_state",
         update_session,
     )
 
@@ -255,6 +344,58 @@ def test_confirm_rejected_replans_with_feedback(monkeypatch):
     flow.run.assert_awaited_once()
 
 
+def test_repeated_approval_returns_existing_execution(monkeypatch):
+    execution = ExecutionResult(
+        project_id=42,
+        project_title="学习计划",
+        created_task_count=1,
+        executed_at=datetime.now(timezone.utc),
+    )
+    state = State(
+        messages=[
+            Message(role=MessageRole.USER, content="帮我规划学习"),
+            Message(role=MessageRole.ASSISTANT, content="项目已创建"),
+        ],
+        phase=AgentPhase.EXECUTED,
+        next_action=Action.EXECUTION_COMPLETE,
+        execution=execution,
+    )
+    agent_session = SimpleNamespace(
+        session_id=1,
+        state_json=state.model_dump_json(),
+    )
+    db = make_db_with_transaction()
+    flow = MagicMock()
+    flow.run = AsyncMock()
+    update_session = AsyncMock()
+
+    monkeypatch.setattr(
+        agent_service,
+        "get_agent_session_for_update",
+        AsyncMock(return_value=agent_session),
+    )
+    monkeypatch.setattr(
+        agent_service,
+        "update_agent_session_state",
+        update_session,
+    )
+
+    returned_session, response = asyncio.run(
+        agent_service.confirm_agent_session_for_user(
+            AgentConfirmRequest(approved=True),
+            session_id=agent_session.session_id,
+            user_id=1,
+            db=db,
+            flow=flow,
+        )
+    )
+
+    assert returned_session is agent_session
+    assert response == "项目已创建"
+    flow.run.assert_not_awaited()
+    update_session.assert_not_awaited()
+
+
 def test_confirm_requires_awaiting_confirmation_phase(monkeypatch):
     state = State(
         messages=[Message(role=MessageRole.USER, content="帮我规划学习")]
@@ -269,7 +410,7 @@ def test_confirm_requires_awaiting_confirmation_phase(monkeypatch):
 
     monkeypatch.setattr(
         agent_service,
-        "get_agent_session_by_session_id_and_user_id",
+        "get_agent_session_for_update",
         AsyncMock(return_value=agent_session),
     )
 

@@ -22,6 +22,34 @@ async def get_agent_session_by_session_id_and_user_id(session_id: int, user_id: 
     return agent_session.scalar_one_or_none()
 
 
+async def get_agent_session_for_update(
+    session_id: int,
+    user_id: int,
+    db: AsyncSession,
+) -> AgentSession | None:
+    result = await db.execute(
+        select(AgentSession)
+        .where(
+            AgentSession.user_id == user_id,
+            AgentSession.session_id == session_id,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return result.scalar_one_or_none()
+
+
+async def update_agent_session_state(
+    agent_session: AgentSession,
+    new_state_json: str,
+    db: AsyncSession,
+) -> AgentSession:
+    agent_session.state_json = new_state_json
+    await db.flush()
+    await db.refresh(agent_session)
+    return agent_session
+
+
 async def update_agent_session_by_session_id_and_user_id(
         session_id: int, 
         user_id: int, 

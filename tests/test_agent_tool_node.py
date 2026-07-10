@@ -1,5 +1,5 @@
 import asyncio
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 from agent.node import ToolNode
 from agent.state import (
@@ -16,8 +16,11 @@ from agent.tools.base import ToolContext
 from agent.tools.registry import TOOL_REGISTRY
 
 
-def make_context() -> ToolContext:
-    return ToolContext(user_id=1, db=AsyncMock())
+def make_context(*, in_transaction: bool = True) -> ToolContext:
+    db = MagicMock()
+    db.in_transaction.return_value = in_transaction
+    db.rollback = AsyncMock()
+    return ToolContext(user_id=1, db=db)
 
 
 def test_tool_node_validates_arguments_before_handler():
@@ -95,3 +98,35 @@ def test_tool_node_records_successful_result():
         "project_id": 42,
         "task_tree": [],
     }
+
+
+def test_tool_node_closes_transaction_it_started():
+    definition = TOOL_REGISTRY[AvailableTool.LIST_USER_PROJECTS]
+    original_handler = definition.handler
+    handler = AsyncMock(return_value=[])
+    object.__setattr__(definition, "handler", handler)
+    context = make_context(in_transaction=False)
+    context.db.in_transaction.side_effect = [False, True]
+    state = State(
+        messages=[Message(role=MessageRole.USER, content="查看项目")],
+        next_action=Action.USE_TOOL,
+        pending_tool_calls=[
+            ToolCall(
+                call_id="call-1",
+                tool_name=AvailableTool.LIST_USER_PROJECTS,
+                parameter={},
+            )
+        ],
+    )
+
+    try:
+        asyncio.run(
+            ToolNode(
+                return_action=Action.PLAN,
+                phase=AgentPhase.PLANNING,
+            ).exec(state, context)
+        )
+    finally:
+        object.__setattr__(definition, "handler", original_handler)
+
+    context.db.rollback.assert_awaited_once()

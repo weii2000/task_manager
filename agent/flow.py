@@ -1,6 +1,8 @@
+from agent.executor import DatabasePlanExecutor, PlanExecutor
 from agent.node import (
     ClarifyNode,
     ConfirmNode,
+    ExecuteNode,
     PlanNode,
     ReviewNode,
     ToolNode,
@@ -13,7 +15,10 @@ from agent.prompt import (
 from agent.provider import LLMProvider
 from agent.state import Action, AgentPhase, AvailableTool, State
 from agent.tools.base import ToolContext
-from exceptions.agent import AgentFlowStepLimitExceededError
+from exceptions.agent import (
+    AgentFlowEntryPointError,
+    AgentFlowStepLimitExceededError,
+)
 
 
 PLAN_ALLOWED_TOOLS = frozenset(AvailableTool)
@@ -27,6 +32,7 @@ class Flow:
         max_steps: int = 20,
         plan_prompt_builder: AgentPromptBuilder | None = None,
         review_prompt_builder: AgentPromptBuilder | None = None,
+        executor: PlanExecutor | None = None,
     ) -> None:
         self.max_steps = max_steps
         self.plan_node = PlanNode(
@@ -47,6 +53,9 @@ class Flow:
         )
         self.clarify_node = ClarifyNode()
         self.confirm_node = ConfirmNode()
+        self.execute_node = ExecuteNode(
+            executor if executor is not None else DatabasePlanExecutor()
+        )
         self.plan_tool_node = ToolNode(
             return_action=Action.PLAN,
             phase=AgentPhase.PLANNING,
@@ -66,12 +75,19 @@ class Flow:
         self.review_node - Action.CONFIRM.value >> self.confirm_node  # pyright: ignore[reportUnusedExpression]
         self.review_tool_node - Action.REVIEW.value >> self.review_node  # pyright: ignore[reportUnusedExpression]
 
+        self.entry_nodes = {
+            Action.PLAN: self.plan_node,
+            Action.EXECUTE: self.execute_node,
+        }
+
     async def run(
         self,
         state: State,
         context: ToolContext,
     ) -> tuple[State, str]:
-        cur = self.plan_node
+        cur = self.entry_nodes.get(state.next_action)
+        if cur is None:
+            raise AgentFlowEntryPointError()
         steps = 0
 
         while cur:

@@ -21,6 +21,10 @@ class Project(Base):
             "system_type",
             name="uq_projects_owner_system_type",
         ),
+        UniqueConstraint(
+            "source_agent_session_id",
+            name="uq_projects_source_agent_session_id",
+        ),
     )
 
     project_id: Mapped[int] = mapped_column(
@@ -32,6 +36,11 @@ class Project(Base):
         ForeignKey("users.user_id"),
         nullable=False,
         index=True,
+    )
+    source_agent_session_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("agent_session.session_id", ondelete="SET NULL"),
+        nullable=True,
     )
     title: Mapped[str] = mapped_column(
         String(100), 

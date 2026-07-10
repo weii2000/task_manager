@@ -4,6 +4,7 @@ from typing import Generic, TypeVar
 from fastapi.encoders import jsonable_encoder
 from pydantic import ValidationError
 
+from agent.executor import PlanExecutor
 from agent.prompt import AgentPromptBuilder
 from agent.provider import LLMProvider
 from agent.state import (
@@ -22,7 +23,11 @@ from agent.state import (
 )
 from agent.tools.base import ToolContext
 from agent.tools.registry import get_tool_definition
-from exceptions.agent import AgentResponseFormatError
+from exceptions.agent import (
+    AgentExecutionNotApprovedError,
+    AgentResponseFormatError,
+    InvalidAgentExecutionStateError,
+)
 from exceptions.base import AppError
 
 
@@ -188,6 +193,35 @@ class ConfirmNode(Node):
         return new_state
 
 
+class ExecuteNode(Node):
+    def __init__(self, executor: PlanExecutor) -> None:
+        super().__init__()
+        self._executor = executor
+
+    async def exec(self, state: State, context: ToolContext) -> State:
+        if state.phase != AgentPhase.READY_TO_EXECUTE:
+            raise InvalidAgentExecutionStateError()
+        if state.human_decision is None or not state.human_decision.approved:
+            raise AgentExecutionNotApprovedError()
+
+        execution = await self._executor.execute(state, context)
+        new_state = state.model_copy(deep=True)
+        new_state.execution = execution
+        new_state.phase = AgentPhase.EXECUTED
+        new_state.next_action = Action.EXECUTION_COMPLETE
+        new_state.pending_tool_calls = []
+        new_state.messages.append(
+            Message(
+                role=MessageRole.ASSISTANT,
+                content=(
+                    f"项目“{execution.project_title}”已创建，"
+                    f"共写入 {execution.created_task_count} 个任务。"
+                ),
+            )
+        )
+        return new_state
+
+
 class ToolNode(Node):
     def __init__(
         self,
@@ -200,8 +234,25 @@ class ToolNode(Node):
 
     async def exec(self, state: State, context: ToolContext) -> State:
         new_state = state.model_copy(deep=True)
-        results: list[ToolResult] = []
+        owns_read_transaction = not context.db.in_transaction()
+        try:
+            results = await self._execute_tool_calls(state, context)
+        finally:
+            if owns_read_transaction and context.db.in_transaction():
+                await context.db.rollback()
 
+        new_state.tool_results.extend(results)
+        new_state.phase = self._phase
+        new_state.pending_tool_calls = []
+        new_state.next_action = self._return_action
+        return new_state
+
+    async def _execute_tool_calls(
+        self,
+        state: State,
+        context: ToolContext,
+    ) -> list[ToolResult]:
+        results: list[ToolResult] = []
         for tool_call in state.pending_tool_calls:
             definition = get_tool_definition(tool_call.tool_name)
             try:
@@ -250,9 +301,4 @@ class ToolNode(Node):
                         ),
                     )
                 )
-
-        new_state.tool_results.extend(results)
-        new_state.phase = self._phase
-        new_state.pending_tool_calls = []
-        new_state.next_action = self._return_action
-        return new_state
+        return results

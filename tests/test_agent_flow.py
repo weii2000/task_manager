@@ -1,5 +1,7 @@
 import asyncio
-from unittest.mock import AsyncMock
+from datetime import datetime, timezone
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -8,11 +10,14 @@ from agent.state import (
     Action,
     AgentPhase,
     AvailableTool,
+    ExecutionResult,
+    HumanDecision,
     Message,
     MessageRole,
     PlanDecision,
     PlanningDraft,
     PlanningInfo,
+    PlanningProject,
     PlanningTask,
     ReviewCategory,
     ReviewDecision,
@@ -34,7 +39,9 @@ def make_state() -> State:
 
 
 def make_context() -> ToolContext:
-    return ToolContext(user_id=1, db=AsyncMock())
+    db = MagicMock()
+    db.in_transaction.return_value = True
+    return ToolContext(user_id=1, db=db)
 
 
 def make_plan_decision(
@@ -44,7 +51,8 @@ def make_plan_decision(
     draft = PlanningDraft()
     if action == Action.REVIEW:
         draft = PlanningDraft(
-            tasks=[PlanningTask(title="完成第一阶段学习")]
+            project=PlanningProject(title="学习计划"),
+            tasks=[PlanningTask(title="完成第一阶段学习")],
         )
     return PlanDecision(
         content=content,
@@ -203,3 +211,37 @@ def test_flow_raises_when_step_limit_exceeded():
 
     with pytest.raises(AgentFlowStepLimitExceededError):
         asyncio.run(flow.run(make_state(), make_context()))
+
+
+def test_flow_executes_approved_plan_from_execute_entrypoint():
+    execution = ExecutionResult(
+        project_id=42,
+        project_title="学习计划",
+        created_task_count=1,
+        executed_at=datetime.now(timezone.utc),
+    )
+    executor = SimpleNamespace(execute=AsyncMock(return_value=execution))
+    provider = AsyncMock()
+    provider.complete = AsyncMock()
+    flow = Flow(provider=provider, executor=executor)
+    state = State(
+        messages=[Message(role=MessageRole.USER, content="帮我规划学习")],
+        phase=AgentPhase.READY_TO_EXECUTE,
+        human_decision=HumanDecision(approved=True),
+        next_action=Action.EXECUTE,
+        draft=PlanningDraft(
+            project=PlanningProject(title="学习计划"),
+            tasks=[PlanningTask(title="完成第一阶段学习")],
+        ),
+    )
+
+    result_state, response = asyncio.run(
+        flow.run(state, make_context())
+    )
+
+    executor.execute.assert_awaited_once()
+    provider.complete.assert_not_awaited()
+    assert result_state.phase == AgentPhase.EXECUTED
+    assert result_state.next_action == Action.EXECUTION_COMPLETE
+    assert result_state.execution == execution
+    assert "共写入 1 个任务" in response

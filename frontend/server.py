@@ -89,6 +89,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Serve the Task Manager frontend")
     parser.add_argument("--port", type=int, default=5173)
     parser.add_argument("--api-url", default="http://127.0.0.1:8000")
+    parser.add_argument("--host", default="127.0.0.1") #
     args = parser.parse_args()
 
     def handler(*handler_args, **handler_kwargs):
@@ -98,7 +99,8 @@ def main() -> None:
             **handler_kwargs,
         )
 
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), handler)
+    # server = ThreadingHTTPServer(("127.0.0.1", args.port), handler)
+    server = ThreadingHTTPServer((args.host, args.port), handler)
     print(f"Frontend: http://127.0.0.1:{args.port}")
     print(f"API proxy: {args.api_url}")
     try:

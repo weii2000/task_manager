@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import StrEnum, auto
-from typing import Any
+from typing import Annotated, Any
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from models.enums import TaskPriority
 
 
 class MessageRole(StrEnum):
@@ -24,6 +26,7 @@ class AgentPhase(StrEnum):
     REVIEWING = auto()
     AWAITING_CONFIRMATION = auto()
     READY_TO_EXECUTE = auto()
+    EXECUTED = auto()
 
 
 class Action(StrEnum):
@@ -34,7 +37,8 @@ class Action(StrEnum):
     REPLAN = auto()
     CONFIRM = auto()
     PAUSE = auto()
-    READY_TO_EXECUTE = auto()
+    EXECUTE = auto()
+    EXECUTION_COMPLETE = auto()
 
 
 class AvailableTool(StrEnum):
@@ -49,21 +53,107 @@ class ToolCall(BaseModel):
 
 
 class PlanningInfo(BaseModel):
-    goal: str | None = None
-    acceptance_criteria: str | None = None
-    constraints: list[str] | None = None
+    goal: str | None = Field(default=None, max_length=2000)
+    acceptance_criteria: str | None = Field(
+        default=None,
+        max_length=5000,
+    )
+    constraints: list[
+        Annotated[str, Field(min_length=1, max_length=1000)]
+    ] | None = Field(default=None, max_length=20)
+
+
+def normalize_planning_time(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("planning time must include timezone")
+    return value.astimezone(timezone.utc)
+
+
+class PlanningProject(BaseModel):
+    title: str = Field(min_length=1, max_length=100)
+    description: str | None = Field(default=None, max_length=5000)
+    start_time: datetime | None = None
+    due_time: datetime | None = None
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("project title cannot be blank")
+        return normalized
+
+    @field_validator("start_time", "due_time")
+    @classmethod
+    def normalize_time(cls, value: datetime | None) -> datetime | None:
+        return normalize_planning_time(value)
+
+    @model_validator(mode="after")
+    def validate_time_range(self) -> PlanningProject:
+        if (
+            self.start_time is not None
+            and self.due_time is not None
+            and self.due_time < self.start_time
+        ):
+            raise ValueError("project due time cannot be before start time")
+        return self
 
 
 class PlanningTask(BaseModel):
     title: str = Field(min_length=1, max_length=100)
-    description: str | None = None
+    description: str | None = Field(default=None, max_length=5000)
+    acceptance_criteria: str | None = Field(default=None, max_length=5000)
+    priority: TaskPriority = TaskPriority.LOW
     start_time: datetime | None = None
     due_time: datetime | None = None
     subtasks: list[PlanningTask] = Field(default_factory=list)
 
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("task title cannot be blank")
+        return normalized
+
+    @field_validator("start_time", "due_time")
+    @classmethod
+    def normalize_time(cls, value: datetime | None) -> datetime | None:
+        return normalize_planning_time(value)
+
+    @model_validator(mode="after")
+    def validate_time_range(self) -> PlanningTask:
+        if (
+            self.start_time is not None
+            and self.due_time is not None
+            and self.due_time < self.start_time
+        ):
+            raise ValueError("task due time cannot be before start time")
+        return self
+
 
 class PlanningDraft(BaseModel):
+    project: PlanningProject | None = None
     tasks: list[PlanningTask] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_task_tree_limits(self) -> PlanningDraft:
+        task_count = 0
+
+        def visit(tasks: list[PlanningTask], depth: int) -> None:
+            nonlocal task_count
+            for task in tasks:
+                if depth > 6:
+                    raise ValueError("task tree depth cannot exceed 6")
+                task_count += 1
+                if task_count > 100:
+                    raise ValueError("task count cannot exceed 100")
+                visit(task.subtasks, depth + 1)
+
+        visit(self.tasks, 1)
+        return self
 
 
 class ReviewSeverity(StrEnum):
@@ -119,6 +209,11 @@ class PlanDecision(BaseDecision):
             Action.REVIEW,
         }:
             raise ValueError("unsupported plan action")
+        if self.next_action == Action.REVIEW:
+            if self.draft.project is None:
+                raise ValueError("review action requires project details")
+            if not self.draft.tasks:
+                raise ValueError("review action requires at least one task")
         return self
 
 
@@ -154,6 +249,13 @@ class HumanDecision(BaseModel):
         return self
 
 
+class ExecutionResult(BaseModel):
+    project_id: int = Field(gt=0)
+    project_title: str = Field(min_length=1, max_length=100)
+    created_task_count: int = Field(ge=1, le=100)
+    executed_at: datetime
+
+
 class ToolResultStatus(StrEnum):
     SUCCESS = auto()
     ERROR = auto()
@@ -185,6 +287,7 @@ class State(BaseModel):
     draft: PlanningDraft = Field(default_factory=PlanningDraft)
     review: ReviewReport | None = None
     human_decision: HumanDecision | None = None
+    execution: ExecutionResult | None = None
     next_action: Action = Action.PLAN
     pending_tool_calls: list[ToolCall] = Field(default_factory=list)
     tool_results: list[ToolResult] = Field(default_factory=list)
