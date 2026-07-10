@@ -68,7 +68,7 @@
 
         <form class="project-form hidden" id="projectForm">
           <input id="projectTitle" maxlength="100" placeholder="项目名称" required>
-          <textarea id="projectGoal" maxlength="2000" placeholder="这个项目最终想实现什么？"></textarea>
+          <textarea id="projectGoal" maxlength="2000" placeholder="一句话说明想达成的结果"></textarea>
           <div>
             <button class="primary-button compact" type="submit">创建</button>
             <button class="text-button" id="cancelProjectButton" type="button">取消</button>
@@ -305,6 +305,26 @@
             </div>
             <p class="form-error" id="agentError" role="alert"></p>
           </form>
+
+          <section class="agent-confirm-bar hidden" id="agentConfirmBar">
+            <div class="agent-confirm-copy">
+              <strong>确认这份计划</strong>
+              <span>通过后进入待执行状态；退回时请说明需要修改的地方。</span>
+            </div>
+            <form id="agentConfirmForm">
+              <label class="sr-only" for="agentConfirmFeedback">计划修改意见</label>
+              <textarea
+                id="agentConfirmFeedback"
+                maxlength="5000"
+                placeholder="退回时填写修改意见"
+              ></textarea>
+              <p class="form-error" id="agentConfirmError" role="alert"></p>
+              <div class="agent-confirm-actions">
+                <button class="ghost-button" id="rejectAgentButton" type="submit">退回修改</button>
+                <button class="primary-button" id="approveAgentButton" type="button">通过计划</button>
+              </div>
+            </form>
+          </section>
         </section>
 
         <aside class="agent-inspector">
@@ -336,6 +356,15 @@
             </div>
             <p id="agentDraftSummary"></p>
             <ol class="agent-draft-tasks" id="agentDraftTasks"></ol>
+          </section>
+
+          <section class="agent-review-card hidden" id="agentReviewCard">
+            <div class="agent-section-heading">
+              <h3>自动评审</h3>
+              <span id="agentReviewCount">0 项发现</span>
+            </div>
+            <p class="agent-review-summary" id="agentReviewSummary"></p>
+            <ul class="agent-review-findings" id="agentReviewFindings"></ul>
           </section>
 
           <details class="agent-debug">

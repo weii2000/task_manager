@@ -43,6 +43,20 @@ const TASK_PRIORITY_LABELS = {
   urgent: "紧急",
 };
 
+const REVIEW_CATEGORY_LABELS = {
+  conflict: "冲突",
+  completeness: "完整性",
+  feasibility: "可行性",
+  schedule: "时间安排",
+  duplication: "重复项",
+};
+
+const REVIEW_SEVERITY_LABELS = {
+  info: "信息",
+  warning: "提醒",
+  blocking: "需修改",
+};
+
 const TASK_TRANSITIONS = {
   todo: ["todo", "in_progress", "done", "cancelled"],
   in_progress: ["in_progress", "blocked", "done", "cancelled"],
@@ -207,6 +221,7 @@ function isDefaultProject(project) {
 function createPlanningState() {
   return {
     messages: [],
+    phase: "planning",
     available_tools: [],
     info: {
       goal: null,
@@ -216,9 +231,12 @@ function createPlanningState() {
     draft: {
       tasks: [],
     },
-    next_action: "think",
+    review: null,
+    human_decision: null,
+    next_action: "plan",
     pending_tool_calls: [],
     tool_results: [],
+    revision_count: 0,
   };
 }
 
@@ -353,9 +371,40 @@ function agentMessageLabel(role) {
 }
 
 function getAgentPhase(planningState) {
-  if (planningState.next_action === "finish") return "草稿已生成";
-  if (planningState.next_action === "use_tool") return "查询中";
-  return "澄清中";
+  if (planningState.next_action === "use_tool") {
+    return { label: "查询中", tone: "working" };
+  }
+  const phases = {
+    planning: { label: "规划中", tone: "working" },
+    reviewing: { label: "评审中", tone: "reviewing" },
+    awaiting_confirmation: { label: "待确认", tone: "attention" },
+    ready_to_execute: { label: "待执行", tone: "ready" },
+  };
+  return phases[planningState.phase] || { label: "规划中", tone: "working" };
+}
+
+function isAgentConversationLocked(planningState) {
+  return ["awaiting_confirmation", "ready_to_execute"].includes(planningState.phase);
+}
+
+function renderAgentReviewFindings(findings = []) {
+  if (!findings.length) {
+    return `<li class="agent-review-empty">未发现需要特别处理的问题。</li>`;
+  }
+  return findings.map((finding) => {
+    const category = REVIEW_CATEGORY_LABELS[finding.category] || finding.category;
+    const severity = REVIEW_SEVERITY_LABELS[finding.severity] || finding.severity;
+    return `
+      <li class="agent-review-finding severity-${escapeHtml(finding.severity)}">
+        <div>
+          <span>${escapeHtml(category)}</span>
+          <span>${escapeHtml(severity)}</span>
+        </div>
+        <p>${escapeHtml(finding.description)}</p>
+        ${finding.suggestion ? `<small>建议：${escapeHtml(finding.suggestion)}</small>` : ""}
+      </li>
+    `;
+  }).join("");
 }
 
 function renderAgentTaskList(tasks = []) {
@@ -373,6 +422,8 @@ function renderAgentTaskList(tasks = []) {
 function applyAgentTurnResult(result) {
   state.agentSessionId = result.session.session_id;
   state.planningState = result.session.state || createPlanningState();
+  $("agentConfirmFeedback").value = "";
+  $("agentConfirmError").textContent = "";
 }
 
 function renderAgent() {
@@ -414,8 +465,8 @@ function renderAgent() {
   $("agentCriteria").innerHTML = renderAgentText(info.acceptance_criteria);
   $("agentMessageCount").textContent = `${messages.length} 条消息`;
   const phase = getAgentPhase(planningState);
-  $("agentPhase").textContent = phase;
-  $("agentPhase").classList.toggle("ready", phase === "草稿已生成");
+  $("agentPhase").textContent = phase.label;
+  $("agentPhase").className = `agent-phase ${phase.tone}`;
 
   const draft = planningState.draft;
   const draftTasks = draft?.tasks || [];
@@ -427,12 +478,38 @@ function renderAgent() {
     $("agentDraftTasks").innerHTML = renderAgentTaskList(draftTasks);
   }
 
+  const review = planningState.review;
+  const reviewFindings = review?.findings || [];
+  $("agentReviewCard").classList.toggle("hidden", !review);
+  $("agentReviewSummary").textContent = review?.summary || "";
+  $("agentReviewCount").textContent = `${reviewFindings.length} 项发现`;
+  $("agentReviewFindings").innerHTML = renderAgentReviewFindings(reviewFindings);
+
+  const awaitingConfirmation = planningState.phase === "awaiting_confirmation";
+  const conversationLocked = isAgentConversationLocked(planningState);
+  $("agentForm").classList.toggle("hidden", conversationLocked);
+  $("agentConfirmBar").classList.toggle("hidden", !awaitingConfirmation);
+
   $("agentStateJson").textContent = JSON.stringify(planningState, null, 2);
-  $("agentMessage").disabled = state.agentSending;
-  $("agentSubmitButton").disabled = state.agentSending;
+  $("agentMessage").disabled = state.agentSending || conversationLocked;
+  $("agentSubmitButton").disabled = state.agentSending || conversationLocked;
   $("resetAgentButton").disabled = state.agentSending;
   $("agentSubmitButton").textContent = state.agentSending ? "处理中…" : "发送";
+  $("agentConfirmFeedback").disabled = state.agentSending;
+  $("rejectAgentButton").disabled = state.agentSending;
+  $("approveAgentButton").disabled = state.agentSending;
+  $("rejectAgentButton").textContent = state.agentSending ? "处理中…" : "退回修改";
+  $("approveAgentButton").textContent = state.agentSending ? "处理中…" : "通过计划";
   $("agentMessages").scrollTop = $("agentMessages").scrollHeight;
+}
+
+function focusAgentControl() {
+  const phase = state.planningState?.phase;
+  if (phase === "awaiting_confirmation") {
+    $("approveAgentButton").focus();
+  } else if (phase !== "ready_to_execute") {
+    $("agentMessage").focus();
+  }
 }
 
 function openAgentDialog() {
@@ -440,7 +517,7 @@ function openAgentDialog() {
   $("agentError").textContent = "";
   renderAgent();
   $("agentDialog").showModal();
-  $("agentMessage").focus();
+  focusAgentControl();
 }
 
 function resetAgentSession() {
@@ -450,8 +527,46 @@ function resetAgentSession() {
   $("agentMessage").value = "";
   $("agentCharacterCount").textContent = "0 / 5000";
   $("agentError").textContent = "";
+  $("agentConfirmFeedback").value = "";
+  $("agentConfirmError").textContent = "";
   renderAgent();
-  $("agentMessage").focus();
+  focusAgentControl();
+}
+
+async function submitAgentConfirmation(approved) {
+  if (state.agentSending || !state.agentSessionId) return;
+
+  const feedback = $("agentConfirmFeedback").value.trim();
+  if (!approved && !feedback) {
+    $("agentConfirmError").textContent = "退回计划时请填写修改意见。";
+    $("agentConfirmFeedback").focus();
+    return;
+  }
+
+  $("agentConfirmError").textContent = "";
+  state.agentSending = true;
+  renderAgent();
+
+  try {
+    const result = await api(
+      `/api/agent/${encodeURIComponent(state.agentSessionId)}/confirmation`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          approved,
+          feedback: approved ? null : feedback,
+        }),
+      },
+    );
+    applyAgentTurnResult(result);
+    showToast(approved ? "计划已通过" : "计划已退回并重新评审");
+  } catch (error) {
+    $("agentConfirmError").textContent = error.message;
+  } finally {
+    state.agentSending = false;
+    renderAgent();
+    if ($("agentDialog").open) focusAgentControl();
+  }
 }
 
 function openProfileDialog() {
@@ -815,9 +930,17 @@ $("agentMessage").addEventListener("keydown", (event) => {
     $("agentForm").requestSubmit();
   }
 });
+$("agentConfirmForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  submitAgentConfirmation(false);
+});
+$("approveAgentButton").addEventListener("click", () => {
+  submitAgentConfirmation(true);
+});
 $("agentForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (state.agentSending) return;
+  if (isAgentConversationLocked(state.planningState || createPlanningState())) return;
 
   const message = $("agentMessage").value.trim();
   if (!message) return;
@@ -848,7 +971,7 @@ $("agentForm").addEventListener("submit", async (event) => {
     state.agentSending = false;
     renderAgent();
     if (!$("agentDialog").open) return;
-    $("agentMessage").focus();
+    focusAgentControl();
   }
 });
 
