@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from typing import Generic, TypeVar
 
@@ -42,12 +44,12 @@ class Node:
     async def exec(self, state: State, context: ToolContext) -> State:
         raise NotImplementedError
 
-    def __rshift__(self, other: "Node") -> "Node":
+    def __rshift__(self, other: Node) -> Node:
         self.successors[self._action] = other
         self._action = "default"
         return other
 
-    def __sub__(self, action: str) -> "Node":
+    def __sub__(self, action: str) -> Node:
         self._action = action or "default"
         return self
 
@@ -163,7 +165,11 @@ class ReviewNode(LLMDecisionNode[ReviewDecision]):
 
 class ClarifyNode(Node):
     async def exec(self, state: State, context: ToolContext) -> State:
-        return state
+        new_state = state.model_copy(deep=True)
+        new_state.phase = AgentPhase.PLANNING
+        new_state.next_action = None
+        new_state.pending_tool_calls = []
+        return new_state
 
 
 class ConfirmNode(Node):
@@ -186,9 +192,9 @@ class ConfirmNode(Node):
                 content="\n".join(message_parts)[:5000],
             )
         )
-        new_state.phase = AgentPhase.AWAITING_CONFIRMATION
+        new_state.phase = AgentPhase.CONFIRMING
         new_state.human_decision = None
-        new_state.next_action = Action.PAUSE
+        new_state.next_action = None
         new_state.pending_tool_calls = []
         return new_state
 
@@ -199,7 +205,7 @@ class ExecuteNode(Node):
         self._executor = executor
 
     async def exec(self, state: State, context: ToolContext) -> State:
-        if state.phase != AgentPhase.READY_TO_EXECUTE:
+        if state.phase != AgentPhase.EXECUTING:
             raise InvalidAgentExecutionStateError()
         if state.human_decision is None or not state.human_decision.approved:
             raise AgentExecutionNotApprovedError()
@@ -207,8 +213,8 @@ class ExecuteNode(Node):
         execution = await self._executor.execute(state, context)
         new_state = state.model_copy(deep=True)
         new_state.execution = execution
-        new_state.phase = AgentPhase.EXECUTED
-        new_state.next_action = Action.EXECUTION_COMPLETE
+        new_state.phase = AgentPhase.COMPLETED
+        new_state.next_action = None
         new_state.pending_tool_calls = []
         new_state.messages.append(
             Message(
@@ -281,7 +287,6 @@ class ToolNode(Node):
                         error=ToolError(
                             code="invalid_tool_arguments",
                             message=str(exc),
-                            retryable=True,
                         ),
                     )
                 )

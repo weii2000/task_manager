@@ -113,13 +113,13 @@ def test_resume_rejects_stale_llm_result(monkeypatch):
             Message(role=MessageRole.USER, content="帮我规划学习"),
             Message(role=MessageRole.ASSISTANT, content="项目已创建"),
         ],
-        phase=AgentPhase.EXECUTED,
-        next_action=Action.EXECUTION_COMPLETE,
+        phase=AgentPhase.COMPLETED,
+        next_action=None,
         execution=ExecutionResult(
             project_id=42,
             project_title="学习计划",
             created_task_count=1,
-            executed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(timezone.utc),
         ),
     )
     locked_session = SimpleNamespace(
@@ -164,8 +164,8 @@ def test_resume_rejects_stale_llm_result(monkeypatch):
 def test_resume_rejects_message_while_awaiting_confirmation(monkeypatch):
     state = State(
         messages=[Message(role=MessageRole.USER, content="帮我规划学习")],
-        phase=AgentPhase.AWAITING_CONFIRMATION,
-        next_action=Action.PAUSE,
+        phase=AgentPhase.CONFIRMING,
+        next_action=None,
     )
     agent_session = SimpleNamespace(
         session_id=1,
@@ -201,8 +201,8 @@ def test_confirm_approved_executes_plan(monkeypatch):
             Message(role=MessageRole.USER, content="帮我规划学习"),
             Message(role=MessageRole.ASSISTANT, content="请确认计划"),
         ],
-        phase=AgentPhase.AWAITING_CONFIRMATION,
-        next_action=Action.PAUSE,
+        phase=AgentPhase.CONFIRMING,
+        next_action=None,
         draft=PlanningDraft(
             project=PlanningProject(title="学习计划"),
             tasks=[PlanningTask(title="完成第一阶段学习")],
@@ -218,16 +218,16 @@ def test_confirm_approved_executes_plan(monkeypatch):
         project_id=42,
         project_title="学习计划",
         created_task_count=1,
-        executed_at=datetime.now(timezone.utc),
+        completed_at=datetime.now(timezone.utc),
     )
 
     async def run_flow(execution_state, context):
         assert context.user_id == 1
         assert context.session_id == agent_session.session_id
-        assert execution_state.phase == AgentPhase.READY_TO_EXECUTE
+        assert execution_state.phase == AgentPhase.EXECUTING
         assert execution_state.next_action == Action.EXECUTE
-        execution_state.phase = AgentPhase.EXECUTED
-        execution_state.next_action = Action.EXECUTION_COMPLETE
+        execution_state.phase = AgentPhase.COMPLETED
+        execution_state.next_action = None
         execution_state.execution = execution
         execution_state.messages.append(
             Message(role=MessageRole.ASSISTANT, content="项目已创建")
@@ -268,8 +268,8 @@ def test_confirm_approved_executes_plan(monkeypatch):
     )
 
     updated_state = State.model_validate_json(updated_session.state_json)
-    assert updated_state.phase == AgentPhase.EXECUTED
-    assert updated_state.next_action == Action.EXECUTION_COMPLETE
+    assert updated_state.phase == AgentPhase.COMPLETED
+    assert updated_state.next_action is None
     assert updated_state.human_decision is not None
     assert updated_state.human_decision.approved is True
     assert updated_state.execution == execution
@@ -283,8 +283,8 @@ def test_confirm_rejected_replans_with_feedback(monkeypatch):
             Message(role=MessageRole.USER, content="帮我规划学习"),
             Message(role=MessageRole.ASSISTANT, content="请确认计划"),
         ],
-        phase=AgentPhase.AWAITING_CONFIRMATION,
-        next_action=Action.PAUSE,
+        phase=AgentPhase.CONFIRMING,
+        next_action=None,
     )
     agent_session = SimpleNamespace(
         session_id=1,
@@ -349,15 +349,15 @@ def test_repeated_approval_returns_existing_execution(monkeypatch):
         project_id=42,
         project_title="学习计划",
         created_task_count=1,
-        executed_at=datetime.now(timezone.utc),
+        completed_at=datetime.now(timezone.utc),
     )
     state = State(
         messages=[
             Message(role=MessageRole.USER, content="帮我规划学习"),
             Message(role=MessageRole.ASSISTANT, content="项目已创建"),
         ],
-        phase=AgentPhase.EXECUTED,
-        next_action=Action.EXECUTION_COMPLETE,
+        phase=AgentPhase.COMPLETED,
+        next_action=None,
         execution=execution,
     )
     agent_session = SimpleNamespace(

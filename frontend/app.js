@@ -379,15 +379,15 @@ function getAgentPhase(planningState) {
   const phases = {
     planning: { label: "规划中", tone: "working" },
     reviewing: { label: "评审中", tone: "reviewing" },
-    awaiting_confirmation: { label: "待确认", tone: "attention" },
-    ready_to_execute: { label: "待执行", tone: "ready" },
-    executed: { label: "已创建", tone: "ready" },
+    confirming: { label: "待确认", tone: "attention" },
+    executing: { label: "创建中", tone: "working" },
+    completed: { label: "已创建", tone: "ready" },
   };
   return phases[planningState.phase] || { label: "规划中", tone: "working" };
 }
 
 function isAgentConversationLocked(planningState) {
-  return ["awaiting_confirmation", "ready_to_execute", "executed"].includes(planningState.phase);
+  return ["confirming", "executing", "completed"].includes(planningState.phase);
 }
 
 function renderAgentReviewFindings(findings = []) {
@@ -438,7 +438,7 @@ function getExecutedProjectId(result) {
   const executionState = result?.session?.state;
   const projectId = executionState?.execution?.project_id;
   if (
-    executionState?.phase !== "executed"
+    executionState?.phase !== "completed"
     || !Number.isInteger(projectId)
     || projectId <= 0
   ) {
@@ -507,7 +507,7 @@ function renderAgent() {
   $("agentReviewCount").textContent = `${reviewFindings.length} 项发现`;
   $("agentReviewFindings").innerHTML = renderAgentReviewFindings(reviewFindings);
 
-  const awaitingConfirmation = planningState.phase === "awaiting_confirmation";
+  const awaitingConfirmation = planningState.phase === "confirming";
   const conversationLocked = isAgentConversationLocked(planningState);
   $("agentForm").classList.toggle("hidden", conversationLocked);
   $("agentConfirmBar").classList.toggle("hidden", !awaitingConfirmation);
@@ -527,9 +527,9 @@ function renderAgent() {
 
 function focusAgentControl() {
   const phase = state.planningState?.phase;
-  if (phase === "awaiting_confirmation") {
+  if (phase === "confirming") {
     $("approveAgentButton").focus();
-  } else if (!["ready_to_execute", "executed"].includes(phase)) {
+  } else if (!["executing", "completed"].includes(phase)) {
     $("agentMessage").focus();
   }
 }

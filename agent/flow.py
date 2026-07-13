@@ -3,6 +3,7 @@ from agent.node import (
     ClarifyNode,
     ConfirmNode,
     ExecuteNode,
+    Node,
     PlanNode,
     ReviewNode,
     ToolNode,
@@ -75,7 +76,7 @@ class Flow:
         self.review_node - Action.CONFIRM.value >> self.confirm_node  # pyright: ignore[reportUnusedExpression]
         self.review_tool_node - Action.REVIEW.value >> self.review_node  # pyright: ignore[reportUnusedExpression]
 
-        self.entry_nodes = {
+        self.entry_nodes: dict[Action, Node] = {
             Action.PLAN: self.plan_node,
             Action.EXECUTE: self.execute_node,
         }
@@ -85,7 +86,12 @@ class Flow:
         state: State,
         context: ToolContext,
     ) -> tuple[State, str]:
-        cur = self.entry_nodes.get(state.next_action)
+        state = State.model_validate(state.model_dump())
+        next_action = state.next_action
+        if next_action is None:
+            raise AgentFlowEntryPointError()
+
+        cur = self.entry_nodes.get(next_action)
         if cur is None:
             raise AgentFlowEntryPointError()
         steps = 0
@@ -95,7 +101,13 @@ class Flow:
                 raise AgentFlowStepLimitExceededError()
 
             state = await cur.exec(state, context)
+            state = State.model_validate(state.model_dump())
             steps += 1
-            cur = cur.successors.get(state.next_action.value)
+            next_action = state.next_action
+            cur = (
+                cur.successors.get(next_action.value)
+                if next_action is not None
+                else None
+            )
 
         return state, state.messages[-1].content

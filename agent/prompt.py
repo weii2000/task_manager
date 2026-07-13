@@ -1,7 +1,7 @@
 import json
 from typing import Protocol
 
-from agent.llm import LLMMessage, LLMRequest
+from agent.provider import LLMMessage, LLMRequest
 from agent.state import (
     AgentPhase,
     AvailableTool,
@@ -203,11 +203,12 @@ class BasePromptBuilder:
             ),
             LLMMessage(
                 role=MessageRole.SYSTEM,
-                content=(
-                    "<current_context>\n"
-                    f"{json.dumps(context, ensure_ascii=False)}\n"
-                    "</current_context>"
-                ),
+                content=json.dumps(
+                    {
+                        "current_context": context,
+                    },
+                    ensure_ascii=False,
+                )
             ),
         ]
         messages.extend(

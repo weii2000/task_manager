@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from core.datetime_utils import to_utc_aware, to_utc_naive
+from core.datetime_utils import restore_utc_aware, to_utc_naive
 from models.enums import CreationSource, TaskPriority, TaskStatus
 
 
@@ -155,4 +155,4 @@ class TaskRead(BaseModel):
     def restore_utc_timezone(cls, value: datetime | None) -> datetime | None:
         if value is None:
             return None
-        return to_utc_aware(value)
+        return restore_utc_aware(value)

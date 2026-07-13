@@ -18,10 +18,7 @@ from agent.state import (
 
 def get_context(request) -> dict[str, object]:
     context_content = request.messages[1].content
-    context_json = context_content.removeprefix(
-        "<current_context>\n"
-    ).removesuffix("\n</current_context>")
-    return json.loads(context_json)
+    return json.loads(context_content)["current_context"]
 
 
 def test_plan_prompt_uses_history_and_planning_context():

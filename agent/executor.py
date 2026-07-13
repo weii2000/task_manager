@@ -93,7 +93,7 @@ class DatabasePlanExecutor:
             project_id=project.project_id,
             project_title=project.title,
             created_task_count=created_task_count,
-            executed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(timezone.utc),
         )
 
     @staticmethod

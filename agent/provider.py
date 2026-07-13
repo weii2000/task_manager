@@ -2,15 +2,24 @@ import logging
 from typing import Protocol, TypeVar
 
 from openai import AsyncOpenAI, OpenAIError
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
-from agent.llm import LLMRequest
+from agent.state import MessageRole
 from exceptions.agent import AgentProviderError, AgentResponseFormatError
 
 
 ResponseT = TypeVar("ResponseT", bound=BaseModel)
 logger = logging.getLogger(__name__)
 MAX_INVALID_RESPONSE_LOG_LENGTH = 2000
+
+
+class LLMMessage(BaseModel):
+    role: MessageRole
+    content: str = Field(min_length=1)
+
+
+class LLMRequest(BaseModel):
+    messages: list[LLMMessage] = Field(min_length=1)
 
 
 class LLMProvider(Protocol):

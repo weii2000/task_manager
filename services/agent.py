@@ -121,15 +121,15 @@ async def confirm_agent_session_for_user(
             raise AgentSessionNotFoundError()
 
         state = State.model_validate_json(agent_session.state_json)
-        if state.phase == AgentPhase.EXECUTED:
+        if state.phase == AgentPhase.COMPLETED:
             return agent_session, state.messages[-1].content
-        if state.phase != AgentPhase.AWAITING_CONFIRMATION:
+        if state.phase != AgentPhase.CONFIRMING:
             raise AgentSessionNotAwaitingConfirmationError()
 
         state.human_decision = HumanDecision.model_validate(
             request.model_dump()
         )
-        state.phase = AgentPhase.READY_TO_EXECUTE
+        state.phase = AgentPhase.EXECUTING
         state.next_action = Action.EXECUTE
         context = ToolContext(
             user_id=user_id,
@@ -165,7 +165,7 @@ async def _reject_agent_session_for_user(
 
         original_state_json = agent_session.state_json
         state = State.model_validate_json(original_state_json)
-        if state.phase != AgentPhase.AWAITING_CONFIRMATION:
+        if state.phase != AgentPhase.CONFIRMING:
             raise AgentSessionNotAwaitingConfirmationError()
 
     state.human_decision = HumanDecision.model_validate(

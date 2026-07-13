@@ -5,10 +5,15 @@ from pydantic import ValidationError
 
 from agent.state import (
     Action,
+    AgentPhase,
+    ExecutionResult,
+    Message,
+    MessageRole,
     PlanDecision,
     PlanningDraft,
     PlanningProject,
     PlanningTask,
+    State,
 )
 
 
@@ -72,3 +77,38 @@ def test_planning_draft_accepts_six_task_levels():
     )
 
     assert draft.tasks[0].subtasks[0].title == "第 2 层"
+
+
+def test_state_rejects_action_incompatible_with_phase():
+    with pytest.raises(ValidationError):
+        State(
+            messages=[Message(role=MessageRole.USER, content="开始规划")],
+            phase=AgentPhase.EXECUTING,
+            next_action=Action.PLAN,
+        )
+
+
+def test_completed_state_requires_execution_result():
+    with pytest.raises(ValidationError):
+        State(
+            messages=[Message(role=MessageRole.USER, content="开始规划")],
+            phase=AgentPhase.COMPLETED,
+            next_action=None,
+        )
+
+
+def test_execution_result_is_only_allowed_in_completed_state():
+    execution = ExecutionResult(
+        project_id=42,
+        project_title="学习计划",
+        created_task_count=1,
+        completed_at=datetime.now(timezone.utc),
+    )
+
+    with pytest.raises(ValidationError):
+        State(
+            messages=[Message(role=MessageRole.USER, content="开始规划")],
+            phase=AgentPhase.PLANNING,
+            next_action=None,
+            execution=execution,
+        )

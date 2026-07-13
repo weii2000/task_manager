@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import StrEnum, auto
 from typing import Annotated, Any
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from core.datetime_utils import to_utc_aware
 from models.enums import TaskPriority
 
 
@@ -24,9 +25,9 @@ class Message(BaseModel):
 class AgentPhase(StrEnum):
     PLANNING = auto()
     REVIEWING = auto()
-    AWAITING_CONFIRMATION = auto()
-    READY_TO_EXECUTE = auto()
-    EXECUTED = auto()
+    CONFIRMING = auto()
+    EXECUTING = auto()
+    COMPLETED = auto()
 
 
 class Action(StrEnum):
@@ -36,9 +37,7 @@ class Action(StrEnum):
     CLARIFY = auto()
     REPLAN = auto()
     CONFIRM = auto()
-    PAUSE = auto()
     EXECUTE = auto()
-    EXECUTION_COMPLETE = auto()
 
 
 class AvailableTool(StrEnum):
@@ -63,14 +62,6 @@ class PlanningInfo(BaseModel):
     ] | None = Field(default=None, max_length=20)
 
 
-def normalize_planning_time(value: datetime | None) -> datetime | None:
-    if value is None:
-        return None
-    if value.tzinfo is None or value.utcoffset() is None:
-        raise ValueError("planning time must include timezone")
-    return value.astimezone(timezone.utc)
-
-
 class PlanningProject(BaseModel):
     title: str = Field(min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=5000)
@@ -88,7 +79,9 @@ class PlanningProject(BaseModel):
     @field_validator("start_time", "due_time")
     @classmethod
     def normalize_time(cls, value: datetime | None) -> datetime | None:
-        return normalize_planning_time(value)
+        if not value:
+            return value
+        return to_utc_aware(value)
 
     @model_validator(mode="after")
     def validate_time_range(self) -> PlanningProject:
@@ -121,7 +114,9 @@ class PlanningTask(BaseModel):
     @field_validator("start_time", "due_time")
     @classmethod
     def normalize_time(cls, value: datetime | None) -> datetime | None:
-        return normalize_planning_time(value)
+        if not value:
+            return value
+        return to_utc_aware(value)
 
     @model_validator(mode="after")
     def validate_time_range(self) -> PlanningTask:
@@ -253,7 +248,7 @@ class ExecutionResult(BaseModel):
     project_id: int = Field(gt=0)
     project_title: str = Field(min_length=1, max_length=100)
     created_task_count: int = Field(ge=1, le=100)
-    executed_at: datetime
+    completed_at: datetime
 
 
 class ToolResultStatus(StrEnum):
@@ -264,7 +259,6 @@ class ToolResultStatus(StrEnum):
 class ToolError(BaseModel):
     code: str
     message: str
-    retryable: bool = False
 
 
 class ToolResult(BaseModel):
@@ -288,7 +282,41 @@ class State(BaseModel):
     review: ReviewReport | None = None
     human_decision: HumanDecision | None = None
     execution: ExecutionResult | None = None
-    next_action: Action = Action.PLAN
+    next_action: Action | None = Action.PLAN
     pending_tool_calls: list[ToolCall] = Field(default_factory=list)
     tool_results: list[ToolResult] = Field(default_factory=list)
     revision_count: int = Field(default=0, ge=0)
+
+    @model_validator(mode="after")
+    def validate_phase_contract(self) -> State:
+        allowed_actions: dict[AgentPhase, set[Action | None]] = {
+            AgentPhase.PLANNING: {
+                None,
+                Action.PLAN,
+                Action.CLARIFY,
+                Action.USE_TOOL,
+                Action.REVIEW,
+            },
+            AgentPhase.REVIEWING: {
+                Action.REVIEW,
+                Action.USE_TOOL,
+                Action.REPLAN,
+                Action.CONFIRM,
+            },
+            AgentPhase.CONFIRMING: {None},
+            AgentPhase.EXECUTING: {Action.EXECUTE},
+            AgentPhase.COMPLETED: {None},
+        }
+        if self.next_action not in allowed_actions[self.phase]:
+            raise ValueError(
+                "next action is incompatible with the current phase"
+            )
+
+        if self.phase == AgentPhase.COMPLETED:
+            if self.execution is None:
+                raise ValueError("completed phase requires execution result")
+        elif self.execution is not None:
+            raise ValueError(
+                "execution result is only allowed in completed phase"
+            )
+        return self

@@ -5,8 +5,7 @@ from unittest.mock import AsyncMock
 from openai import OpenAIError
 import pytest
 
-from agent.llm import LLMMessage, LLMRequest
-from agent.provider import OpenAICompatibleLLMProvider
+from agent.provider import LLMMessage, LLMRequest, OpenAICompatibleLLMProvider
 from agent.state import Action, PlanDecision
 from exceptions.agent import AgentProviderError, AgentResponseFormatError
 
