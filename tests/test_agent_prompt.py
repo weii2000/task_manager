@@ -1,5 +1,6 @@
 import json
 
+from agent.context import RetrievedMemory
 from agent.flow import PLAN_ALLOWED_TOOLS, REVIEW_ALLOWED_TOOLS
 from agent.prompt import PlanPromptBuilder, ReviewPromptBuilder
 from agent.state import (
@@ -14,6 +15,7 @@ from agent.state import (
     ToolResult,
     ToolResultStatus,
 )
+from models.enums import MemoryCategory
 
 
 def get_context(request) -> dict[str, object]:
@@ -108,3 +110,29 @@ def test_review_prompt_only_includes_review_tool_results():
             "error": None,
         }
     ]
+
+
+def test_prompt_includes_ephemeral_long_term_memory_context():
+    state = State(
+        messages=[Message(role=MessageRole.USER, content="规划学习")]
+    )
+    memory = RetrievedMemory(
+        memory_id=12,
+        category=MemoryCategory.PREFERENCE,
+        content="用户偏好每个任务不超过一小时",
+    )
+
+    request = PlanPromptBuilder(PLAN_ALLOWED_TOOLS).build(
+        state,
+        (memory,),
+    )
+    context = get_context(request)
+
+    assert context["long_term_memories"] == [
+        {
+            "memory_id": 12,
+            "category": "preference",
+            "content": "用户偏好每个任务不超过一小时",
+        }
+    ]
+    assert "long_term_memories" not in state.model_dump()

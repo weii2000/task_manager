@@ -4,8 +4,8 @@ from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel
 
+from agent.context import AgentRunContext
 from agent.state import AvailableTool
-from agent.tools.base import ToolContext
 from agent.tools.project import (
     get_project_task_tree,
     list_user_projects,
@@ -24,7 +24,7 @@ OutputT = TypeVar("OutputT")
 class ToolDefinition(Generic[InputT, OutputT]):
     description: str
     input_schema: type[InputT]
-    handler: Callable[[ToolContext, InputT], Awaitable[OutputT]]
+    handler: Callable[[AgentRunContext, InputT], Awaitable[OutputT]]
 
 
 TOOL_REGISTRY: dict[AvailableTool, ToolDefinition[Any, Any]] = {

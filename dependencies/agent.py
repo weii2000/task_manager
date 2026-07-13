@@ -1,10 +1,14 @@
 from agent.flow import Flow
+from agent.long_term_memory import LLMMemoryResolver, MemoryResolver
+from agent.memory_extractor import LLMMemoryExtractor, MemoryExtractor
 from agent.provider import LLMProvider, OpenAICompatibleLLMProvider
 from core.config import settings
 
 
 _provider: LLMProvider | None = None
 _flow: Flow | None = None
+_memory_resolver: MemoryResolver | None = None
+_memory_extractor: MemoryExtractor | None = None
 
 
 def get_llm_provider() -> LLMProvider:
@@ -36,3 +40,21 @@ def get_agent_flow() -> Flow:
         _flow = Flow(provider=get_llm_provider())
 
     return _flow
+
+
+def get_memory_resolver() -> MemoryResolver:
+    global _memory_resolver
+
+    if _memory_resolver is None:
+        _memory_resolver = LLMMemoryResolver(get_llm_provider())
+
+    return _memory_resolver
+
+
+def get_memory_extractor() -> MemoryExtractor:
+    global _memory_extractor
+
+    if _memory_extractor is None:
+        _memory_extractor = LLMMemoryExtractor(get_llm_provider())
+
+    return _memory_extractor

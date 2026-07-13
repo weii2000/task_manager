@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from agent.context import AgentRunContext
 from agent.flow import Flow
 from agent.state import (
     Action,
@@ -27,7 +28,6 @@ from agent.state import (
     State,
     ToolCall,
 )
-from agent.tools.base import ToolContext
 from agent.tools.registry import TOOL_REGISTRY
 from exceptions.agent import (
     AgentFlowEntryPointError,
@@ -41,10 +41,10 @@ def make_state() -> State:
     )
 
 
-def make_context() -> ToolContext:
+def make_context() -> AgentRunContext:
     db = MagicMock()
     db.in_transaction.return_value = True
-    return ToolContext(user_id=1, db=db)
+    return AgentRunContext(user_id=1, db=db)
 
 
 def make_plan_decision(

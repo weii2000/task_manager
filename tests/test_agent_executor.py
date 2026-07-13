@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from agent.context import AgentRunContext
 from agent.executor import DatabasePlanExecutor
 from agent.state import (
     Message,
@@ -15,7 +16,6 @@ from agent.state import (
     PlanningTask,
     State,
 )
-from agent.tools.base import ToolContext
 from exceptions.agent import AgentExecutionContextError
 from models.enums import CreationSource, ProjectStatus, TaskPriority, TaskStatus
 
@@ -65,7 +65,7 @@ def test_database_executor_creates_project_and_task_tree(monkeypatch):
     monkeypatch.setattr("agent.executor.create_project_by_data", create_project)
     monkeypatch.setattr("agent.executor.create_task_by_data", create_task)
     db = AsyncMock()
-    context = ToolContext(user_id=7, db=db, session_id=9)
+    context = AgentRunContext(user_id=7, db=db, session_id=9)
 
     result = asyncio.run(
         DatabasePlanExecutor().execute(make_state(), context)
@@ -99,7 +99,7 @@ def test_database_executor_creates_project_and_task_tree(monkeypatch):
 
 
 def test_database_executor_requires_session_context():
-    context = ToolContext(user_id=7, db=AsyncMock())
+    context = AgentRunContext(user_id=7, db=AsyncMock())
 
     with pytest.raises(AgentExecutionContextError):
         asyncio.run(DatabasePlanExecutor().execute(make_state(), context))
@@ -108,7 +108,7 @@ def test_database_executor_requires_session_context():
 def test_database_executor_rejects_empty_task_plan():
     state = make_state()
     state.draft.tasks = []
-    context = ToolContext(user_id=7, db=AsyncMock(), session_id=9)
+    context = AgentRunContext(user_id=7, db=AsyncMock(), session_id=9)
 
     with pytest.raises(AgentExecutionContextError):
         asyncio.run(DatabasePlanExecutor().execute(state, context))

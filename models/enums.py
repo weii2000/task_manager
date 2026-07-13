@@ -32,3 +32,21 @@ class TaskPriority(StrEnum):
     MEDIUM = "medium"
     HIGH = "high"
     URGENT = "urgent"
+
+
+class MemoryCategory(StrEnum):
+    PROFILE = "profile"
+    PREFERENCE = "preference"
+    CONSTRAINT = "constraint"
+    LONG_TERM_GOAL = "long_term_goal"
+
+
+class MemoryStatus(StrEnum):
+    PENDING = "pending"
+    ACTIVE = "active"
+    ARCHIVED = "archived"
+
+
+class MemorySource(StrEnum):
+    MANUAL = "manual"
+    CONVERSATION = "conversation"

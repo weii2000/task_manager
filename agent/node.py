@@ -6,6 +6,7 @@ from typing import Generic, TypeVar
 from fastapi.encoders import jsonable_encoder
 from pydantic import ValidationError
 
+from agent.context import AgentRunContext
 from agent.executor import PlanExecutor
 from agent.prompt import AgentPromptBuilder
 from agent.provider import LLMProvider
@@ -23,7 +24,6 @@ from agent.state import (
     ToolResult,
     ToolResultStatus,
 )
-from agent.tools.base import ToolContext
 from agent.tools.registry import get_tool_definition
 from exceptions.agent import (
     AgentExecutionNotApprovedError,
@@ -41,7 +41,7 @@ class Node:
         self.successors: dict[str, Node] = {}
         self._action = "default"
 
-    async def exec(self, state: State, context: ToolContext) -> State:
+    async def exec(self, state: State, context: AgentRunContext) -> State:
         raise NotImplementedError
 
     def __rshift__(self, other: Node) -> Node:
@@ -68,8 +68,15 @@ class LLMDecisionNode(Node, Generic[DecisionT], ABC):
         self._response_model = response_model
         self._allowed_tools = allowed_tools
 
-    async def exec(self, state: State, context: ToolContext) -> State:
-        request = self._prompt_builder.build(state)
+    async def exec(
+        self,
+        state: State,
+        context: AgentRunContext,
+    ) -> State:
+        request = self._prompt_builder.build(
+            state,
+            context.retrieved_memories,
+        )
         decision = await self._provider.complete(
             request,
             self._response_model,
@@ -164,7 +171,7 @@ class ReviewNode(LLMDecisionNode[ReviewDecision]):
 
 
 class ClarifyNode(Node):
-    async def exec(self, state: State, context: ToolContext) -> State:
+    async def exec(self, state: State, context: AgentRunContext) -> State:
         new_state = state.model_copy(deep=True)
         new_state.phase = AgentPhase.PLANNING
         new_state.next_action = None
@@ -173,7 +180,7 @@ class ClarifyNode(Node):
 
 
 class ConfirmNode(Node):
-    async def exec(self, state: State, context: ToolContext) -> State:
+    async def exec(self, state: State, context: AgentRunContext) -> State:
         new_state = state.model_copy(deep=True)
         message_parts = ["计划已完成自动评审，请确认是否采用。"]
         if state.review is not None:
@@ -204,7 +211,7 @@ class ExecuteNode(Node):
         super().__init__()
         self._executor = executor
 
-    async def exec(self, state: State, context: ToolContext) -> State:
+    async def exec(self, state: State, context: AgentRunContext) -> State:
         if state.phase != AgentPhase.EXECUTING:
             raise InvalidAgentExecutionStateError()
         if state.human_decision is None or not state.human_decision.approved:
@@ -238,7 +245,7 @@ class ToolNode(Node):
         self._return_action = return_action
         self._phase = phase
 
-    async def exec(self, state: State, context: ToolContext) -> State:
+    async def exec(self, state: State, context: AgentRunContext) -> State:
         new_state = state.model_copy(deep=True)
         owns_read_transaction = not context.db.in_transaction()
         try:
@@ -256,7 +263,7 @@ class ToolNode(Node):
     async def _execute_tool_calls(
         self,
         state: State,
-        context: ToolContext,
+        context: AgentRunContext,
     ) -> list[ToolResult]:
         results: list[ToolResult] = []
         for tool_call in state.pending_tool_calls:

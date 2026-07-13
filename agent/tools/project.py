@@ -1,4 +1,4 @@
-from agent.tools.base import ToolContext
+from agent.context import AgentRunContext
 from agent.tools.schemas import (
     AgentProjectOverview,
     AgentProjectRead,
@@ -12,7 +12,7 @@ from services.task import get_project_tasks_for_user
 
 
 async def list_user_projects(
-    context: ToolContext,
+    context: AgentRunContext,
     arguments: ListUserProjectsInput,
 ) -> list[AgentProjectRead]:
     result = await get_projects_for_user(
@@ -43,7 +43,7 @@ def build_task_tree(tasks: list[TaskRead]) -> list[AgentTaskRead]:
 
 
 async def get_project_task_tree(
-    context: ToolContext,
+    context: AgentRunContext,
     arguments: GetProjectTaskTreeInput,
 ) -> AgentProjectOverview:
     tasks = await get_project_tasks_for_user(

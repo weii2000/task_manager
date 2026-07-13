@@ -1,4 +1,6 @@
+from agent.context import AgentRunContext
 from agent.executor import DatabasePlanExecutor, PlanExecutor
+from agent.memory import MemoryManager
 from agent.node import (
     ClarifyNode,
     ConfirmNode,
@@ -15,7 +17,6 @@ from agent.prompt import (
 )
 from agent.provider import LLMProvider
 from agent.state import Action, AgentPhase, AvailableTool, State
-from agent.tools.base import ToolContext
 from exceptions.agent import (
     AgentFlowEntryPointError,
     AgentFlowStepLimitExceededError,
@@ -34,8 +35,12 @@ class Flow:
         plan_prompt_builder: AgentPromptBuilder | None = None,
         review_prompt_builder: AgentPromptBuilder | None = None,
         executor: PlanExecutor | None = None,
+        memory_manager: MemoryManager | None = None,
     ) -> None:
         self.max_steps = max_steps
+        self.memory_manager = (
+            memory_manager or MemoryManager(provider)
+        )
         self.plan_node = PlanNode(
             provider=provider,
             prompt_builder=(
@@ -84,12 +89,16 @@ class Flow:
     async def run(
         self,
         state: State,
-        context: ToolContext,
+        context: AgentRunContext,
     ) -> tuple[State, str]:
         state = State.model_validate(state.model_dump())
         next_action = state.next_action
         if next_action is None:
             raise AgentFlowEntryPointError()
+
+        if next_action == Action.PLAN:
+            state = await self.memory_manager.compact(state)
+            state = State.model_validate(state.model_dump())
 
         cur = self.entry_nodes.get(next_action)
         if cur is None:

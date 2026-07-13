@@ -17,6 +17,7 @@ from agent.state import (
     PlanningTask,
     State,
 )
+from agent.context import RetrievedMemory
 from exceptions.agent import (
     AgentSessionNotAcceptingTurnError,
     AgentSessionNotAwaitingConfirmationError,
@@ -34,6 +35,106 @@ def make_db_with_transaction():
     db = MagicMock()
     db.begin.return_value = transaction
     return db
+
+
+@pytest.fixture(autouse=True)
+def mock_agent_memory_retrieval(monkeypatch):
+    monkeypatch.setattr(
+        agent_service,
+        "get_active_memory_references_for_user",
+        AsyncMock(return_value=[]),
+    )
+
+
+def test_create_session_loads_long_term_memories(monkeypatch):
+    memory = RetrievedMemory(
+        memory_id=8,
+        category="preference",
+        content="用户偏好一小时以内的任务",
+    )
+    get_memories = AsyncMock(return_value=[memory])
+    monkeypatch.setattr(
+        agent_service,
+        "get_active_memory_references_for_user",
+        get_memories,
+    )
+    db = make_db_with_transaction()
+    flow = MagicMock()
+
+    async def run_flow(state, context):
+        assert context.retrieved_memories == (memory,)
+        assert not hasattr(state, "long_term_memories")
+        state.messages.append(
+            Message(role=MessageRole.ASSISTANT, content="请补充目标")
+        )
+        return state, "请补充目标"
+
+    flow.run = AsyncMock(side_effect=run_flow)
+    session = SimpleNamespace(session_id=1, state_json="")
+
+    async def save_session(user_id, state_json, save_db):
+        assert user_id == 1
+        assert save_db is db
+        session.state_json = state_json
+        return session
+
+    monkeypatch.setattr(
+        agent_service,
+        "save_agent_session",
+        AsyncMock(side_effect=save_session),
+    )
+    extract_pending = AsyncMock(return_value=[])
+    monkeypatch.setattr(
+        agent_service,
+        "extract_pending_memories_from_turn",
+        extract_pending,
+    )
+    extractor = object()
+
+    returned_session, response = asyncio.run(
+        agent_service.create_agent_session_for_user(
+            AgentTurnRequest(message="帮我规划学习"),
+            user_id=1,
+            db=db,
+            flow=flow,
+            memory_extractor=extractor,
+        )
+    )
+
+    assert returned_session is session
+    assert response == "请补充目标"
+    get_memories.assert_awaited_once_with(1, db)
+    extraction_args = extract_pending.await_args.args
+    assert [message.content for message in extraction_args[0]] == [
+        "帮我规划学习"
+    ]
+    assert extraction_args[1:] == (0, 1, 1, db, extractor)
+
+
+def test_memory_extraction_failure_does_not_fail_agent_turn(
+    monkeypatch,
+):
+    extract_pending = AsyncMock(side_effect=RuntimeError("failed"))
+    monkeypatch.setattr(
+        agent_service,
+        "extract_pending_memories_from_turn",
+        extract_pending,
+    )
+    state = State(
+        messages=[Message(role=MessageRole.USER, content="记住我的偏好")]
+    )
+
+    asyncio.run(
+        agent_service._extract_memories_best_effort(
+            state=state,
+            user_id=1,
+            session_id=2,
+            db=make_db_with_transaction(),
+            extractor=object(),
+        )
+    )
+
+    extract_pending.assert_awaited_once()
 
 
 def test_resume_agent_session_not_found_raises(monkeypatch):

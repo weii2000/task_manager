@@ -27,3 +27,8 @@ class User(Base):
         "AgentSession",
         back_populates="user",
     )
+    memories: Mapped[list["UserMemory"]] = relationship(  # type: ignore
+        "UserMemory",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )

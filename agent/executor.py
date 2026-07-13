@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
 from typing import Protocol
 
+from agent.context import AgentRunContext
 from agent.state import ExecutionResult, PlanningTask, State
-from agent.tools.base import ToolContext
 from core.datetime_utils import to_utc_naive
 from crud.project import create_project_by_data
 from crud.task import create_task_by_data
@@ -14,7 +14,7 @@ class PlanExecutor(Protocol):
     async def execute(
         self,
         state: State,
-        context: ToolContext,
+        context: AgentRunContext,
     ) -> ExecutionResult:
         ...
 
@@ -23,7 +23,7 @@ class DatabasePlanExecutor:
     async def execute(
         self,
         state: State,
-        context: ToolContext,
+        context: AgentRunContext,
     ) -> ExecutionResult:
         if context.session_id is None:
             raise AgentExecutionContextError()

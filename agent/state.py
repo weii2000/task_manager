@@ -273,6 +273,11 @@ class ToolResult(BaseModel):
 
 class State(BaseModel):
     messages: list[Message]
+    memory_summary: str | None = Field(
+        default=None,
+        max_length=5000,
+    )
+    summarized_message_count: int = Field(default=0, ge=0)
     phase: AgentPhase = AgentPhase.PLANNING
     available_tools: list[AvailableTool] = Field(
         default_factory=lambda: list(AvailableTool)
@@ -319,4 +324,23 @@ class State(BaseModel):
             raise ValueError(
                 "execution result is only allowed in completed phase"
             )
+        return self
+
+    @model_validator(mode="after")
+    def validate_memory(self) -> State:
+        if self.summarized_message_count > len(self.messages):
+            raise ValueError(
+                "summarized message count cannot exceed message count"
+            )
+
+        if self.summarized_message_count == 0:
+            if self.memory_summary is not None:
+                raise ValueError(
+                    "memory summary requires summarized messages"
+                )
+        elif self.memory_summary is None:
+            raise ValueError(
+                "summarized messages require memory summary"
+            )
+
         return self

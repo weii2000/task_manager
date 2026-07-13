@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.flow import Flow
+from agent.memory_extractor import MemoryExtractor
 from agent.state import State
 from database.session import get_db
-from dependencies.agent import get_agent_flow
+from dependencies.agent import get_agent_flow, get_memory_extractor
 from dependencies.auth import get_current_user
 from models.agent import AgentSession
 from models.user import User
@@ -46,12 +47,14 @@ async def create_agent_session_for_user_api(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     flow: Flow = Depends(get_agent_flow),
+    memory_extractor: MemoryExtractor = Depends(get_memory_extractor),
 ) -> ApiResponse[AgentTurnResponse]:
     agent_session, response = await create_agent_session_for_user(
         request,
         current_user.user_id,
         db,
         flow,
+        memory_extractor,
     )
     return build_agent_response(agent_session, response)
 
@@ -63,6 +66,7 @@ async def resume_agent_session_by_session_id_for_user_api(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     flow: Flow = Depends(get_agent_flow),
+    memory_extractor: MemoryExtractor = Depends(get_memory_extractor),
 ) -> ApiResponse[AgentTurnResponse]:
     agent_session, response = (
         await resume_agent_session_by_session_id_for_user(
@@ -71,6 +75,7 @@ async def resume_agent_session_by_session_id_for_user_api(
             current_user.user_id,
             db,
             flow,
+            memory_extractor,
         )
     )
     return build_agent_response(agent_session, response)
@@ -86,6 +91,7 @@ async def confirm_agent_session_for_user_api(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     flow: Flow = Depends(get_agent_flow),
+    memory_extractor: MemoryExtractor = Depends(get_memory_extractor),
 ) -> ApiResponse[AgentTurnResponse]:
     agent_session, response = await confirm_agent_session_for_user(
         request,
@@ -93,5 +99,6 @@ async def confirm_agent_session_for_user_api(
         current_user.user_id,
         db,
         flow,
+        memory_extractor,
     )
     return build_agent_response(agent_session, response)

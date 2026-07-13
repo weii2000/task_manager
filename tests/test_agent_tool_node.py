@@ -1,6 +1,7 @@
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
+from agent.context import AgentRunContext
 from agent.node import ToolNode
 from agent.state import (
     Action,
@@ -12,15 +13,14 @@ from agent.state import (
     ToolCall,
     ToolResultStatus,
 )
-from agent.tools.base import ToolContext
 from agent.tools.registry import TOOL_REGISTRY
 
 
-def make_context(*, in_transaction: bool = True) -> ToolContext:
+def make_context(*, in_transaction: bool = True) -> AgentRunContext:
     db = MagicMock()
     db.in_transaction.return_value = in_transaction
     db.rollback = AsyncMock()
-    return ToolContext(user_id=1, db=db)
+    return AgentRunContext(user_id=1, db=db)
 
 
 def test_tool_node_validates_arguments_before_handler():

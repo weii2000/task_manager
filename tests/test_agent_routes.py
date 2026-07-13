@@ -1,6 +1,8 @@
 from unittest.mock import AsyncMock
 
-from dependencies.agent import get_agent_flow
+import pytest
+
+from dependencies.agent import get_agent_flow, get_memory_extractor
 from exceptions.agent import (
     AgentSessionNotAwaitingConfirmationError,
     AgentSessionNotFoundError,
@@ -9,10 +11,24 @@ from main import app
 from schemas.agent import AgentConfirmRequest, AgentTurnRequest
 
 
+@pytest.fixture
+def fake_memory_extractor():
+    extractor = object()
+
+    async def override_get_memory_extractor():
+        return extractor
+
+    app.dependency_overrides[
+        get_memory_extractor
+    ] = override_get_memory_extractor
+    return extractor
+
+
 def test_resume_agent_session_not_found_returns_404(
     client,
     fake_user,
     fake_db,
+    fake_memory_extractor,
     monkeypatch,
 ):
     fake_flow = object()
@@ -48,6 +64,7 @@ def test_resume_agent_session_not_found_returns_404(
         fake_user.user_id,
         fake_db,
         fake_flow,
+        fake_memory_extractor,
     )
 
 
@@ -55,6 +72,7 @@ def test_confirm_wrong_phase_returns_409(
     client,
     fake_user,
     fake_db,
+    fake_memory_extractor,
     monkeypatch,
 ):
     fake_flow = object()
@@ -88,6 +106,7 @@ def test_confirm_wrong_phase_returns_409(
         fake_user.user_id,
         fake_db,
         fake_flow,
+        fake_memory_extractor,
     )
 
 

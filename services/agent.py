@@ -1,6 +1,10 @@
+import logging
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent.context import AgentRunContext
 from agent.flow import Flow
+from agent.memory_extractor import MemoryExtractor
 from agent.state import (
     Action,
     AgentPhase,
@@ -9,7 +13,6 @@ from agent.state import (
     MessageRole,
     State,
 )
-from agent.tools.base import ToolContext
 from crud.agent import (
     get_agent_session_by_session_id_and_user_id,
     get_agent_session_for_update,
@@ -24,6 +27,13 @@ from exceptions.agent import (
 )
 from models.agent import AgentSession
 from schemas.agent import AgentConfirmRequest, AgentTurnRequest
+from services.memory import (
+    extract_pending_memories_from_turn,
+    get_active_memory_references_for_user,
+)
+
+
+logger = logging.getLogger(__name__)
 
 
 async def create_agent_session_for_user(
@@ -31,13 +41,23 @@ async def create_agent_session_for_user(
     user_id: int,
     db: AsyncSession,
     flow: Flow,
+    memory_extractor: MemoryExtractor | None = None,
 ) -> tuple[AgentSession, str]:
     state = State(
         messages=[
             Message(role=MessageRole.USER, content=request.message)
         ]
     )
-    context = ToolContext(user_id, db)
+    async with db.begin():
+        memories = await get_active_memory_references_for_user(
+            user_id,
+            db,
+        )
+    context = AgentRunContext(
+        user_id=user_id,
+        db=db,
+        retrieved_memories=tuple(memories),
+    )
     response_state, response = await flow.run(state, context)
     async with db.begin():
         agent_session = await save_agent_session(
@@ -45,6 +65,13 @@ async def create_agent_session_for_user(
             response_state.model_dump_json(),
             db,
         )
+    await _extract_memories_best_effort(
+        response_state,
+        user_id,
+        agent_session.session_id,
+        db,
+        memory_extractor,
+    )
     return agent_session, response
 
 
@@ -54,12 +81,18 @@ async def resume_agent_session_by_session_id_for_user(
     user_id: int,
     db: AsyncSession,
     flow: Flow,
+    memory_extractor: MemoryExtractor | None = None,
 ) -> tuple[AgentSession, str]:
     async with db.begin():
         agent_session = await get_agent_session_by_session_id_and_user_id(
             session_id,
             user_id,
             db,
+        )
+        memories = (
+            await get_active_memory_references_for_user(user_id, db)
+            if agent_session is not None
+            else []
         )
     if agent_session is None:
         raise AgentSessionNotFoundError()
@@ -74,7 +107,12 @@ async def resume_agent_session_by_session_id_for_user(
     )
     state.next_action = Action.PLAN
     state.pending_tool_calls = []
-    context = ToolContext(user_id, db)
+    context = AgentRunContext(
+        user_id=user_id,
+        db=db,
+        session_id=session_id,
+        retrieved_memories=tuple(memories),
+    )
     response_state, response = await flow.run(state, context)
     async with db.begin():
         locked_session = await get_agent_session_for_update(
@@ -92,6 +130,13 @@ async def resume_agent_session_by_session_id_for_user(
             db,
         )
 
+    await _extract_memories_best_effort(
+        response_state,
+        user_id,
+        session_id,
+        db,
+        memory_extractor,
+    )
     return updated_session, response
 
 
@@ -101,6 +146,7 @@ async def confirm_agent_session_for_user(
     user_id: int,
     db: AsyncSession,
     flow: Flow,
+    memory_extractor: MemoryExtractor | None = None,
 ) -> tuple[AgentSession, str]:
     if not request.approved:
         return await _reject_agent_session_for_user(
@@ -109,6 +155,7 @@ async def confirm_agent_session_for_user(
             user_id,
             db,
             flow,
+            memory_extractor,
         )
 
     async with db.begin():
@@ -131,7 +178,7 @@ async def confirm_agent_session_for_user(
         )
         state.phase = AgentPhase.EXECUTING
         state.next_action = Action.EXECUTE
-        context = ToolContext(
+        context = AgentRunContext(
             user_id=user_id,
             db=db,
             session_id=session_id,
@@ -153,6 +200,7 @@ async def _reject_agent_session_for_user(
     user_id: int,
     db: AsyncSession,
     flow: Flow,
+    memory_extractor: MemoryExtractor | None = None,
 ) -> tuple[AgentSession, str]:
     async with db.begin():
         agent_session = await get_agent_session_for_update(
@@ -167,6 +215,10 @@ async def _reject_agent_session_for_user(
         state = State.model_validate_json(original_state_json)
         if state.phase != AgentPhase.CONFIRMING:
             raise AgentSessionNotAwaitingConfirmationError()
+        memories = await get_active_memory_references_for_user(
+            user_id,
+            db,
+        )
 
     state.human_decision = HumanDecision.model_validate(
         request.model_dump()
@@ -179,10 +231,11 @@ async def _reject_agent_session_for_user(
     state.next_action = Action.PLAN
     state.pending_tool_calls = []
     state.revision_count += 1
-    context = ToolContext(
+    context = AgentRunContext(
         user_id=user_id,
         db=db,
         session_id=session_id,
+        retrieved_memories=tuple(memories),
     )
     response_state, response = await flow.run(state, context)
 
@@ -202,4 +255,51 @@ async def _reject_agent_session_for_user(
             db,
         )
 
+    await _extract_memories_best_effort(
+        response_state,
+        user_id,
+        session_id,
+        db,
+        memory_extractor,
+    )
     return updated_session, response
+
+
+async def _extract_memories_best_effort(
+    state: State,
+    user_id: int,
+    session_id: int,
+    db: AsyncSession,
+    extractor: MemoryExtractor | None,
+) -> None:
+    if extractor is None:
+        return
+
+    latest_user_index = next(
+        (
+            index
+            for index in range(len(state.messages) - 1, -1, -1)
+            if state.messages[index].role == MessageRole.USER
+        ),
+        None,
+    )
+    if latest_user_index is None:
+        return
+
+    window_start = max(0, latest_user_index - 3)
+    messages = state.messages[window_start : latest_user_index + 1]
+    try:
+        await extract_pending_memories_from_turn(
+            messages,
+            latest_user_index,
+            session_id,
+            user_id,
+            db,
+            extractor,
+        )
+    except Exception:
+        logger.exception(
+            "Long-term memory extraction failed for user=%s session=%s",
+            user_id,
+            session_id,
+        )
