@@ -1,3 +1,10 @@
+const AGENT_SESSION_STORAGE_KEY = "planwise_agent_session_id";
+const AGENT_RECOVERY_ATTEMPTS = 30;
+const AGENT_RECOVERY_INTERVAL_MS = 2000;
+const storedAgentSessionId = Number(
+  localStorage.getItem(AGENT_SESSION_STORAGE_KEY),
+);
+
 const state = {
   mode: "login",
   token: localStorage.getItem("planwise_token"),
@@ -11,10 +18,19 @@ const state = {
   collapsedTaskIds: new Set(),
   parentTask: null,
   editingTask: null,
-  agentSessionId: null,
+  agentSessionId: Number.isInteger(storedAgentSessionId)
+    && storedAgentSessionId > 0
+    ? storedAgentSessionId
+    : null,
   planningState: null,
   agentPendingMessage: null,
   agentSending: false,
+  activeMemories: [],
+  pendingMemories: [],
+  memoryStatus: "active",
+  editingMemoryId: null,
+  memoryLoading: false,
+  memoryMutatingId: null,
 };
 
 let refreshPromise = null;
@@ -55,6 +71,18 @@ const REVIEW_SEVERITY_LABELS = {
   info: "信息",
   warning: "提醒",
   blocking: "需修改",
+};
+
+const MEMORY_CATEGORY_LABELS = {
+  profile: "个人信息",
+  preference: "偏好",
+  constraint: "约束",
+  long_term_goal: "长期目标",
+};
+
+const MEMORY_SOURCE_LABELS = {
+  manual: "手动添加",
+  conversation: "对话提取",
 };
 
 const TASK_TRANSITIONS = {
@@ -221,6 +249,8 @@ function isDefaultProject(project) {
 function createPlanningState() {
   return {
     messages: [],
+    memory_summary: null,
+    summarized_message_count: 0,
     phase: "planning",
     available_tools: [],
     info: {
@@ -277,9 +307,16 @@ function clearAuth() {
   state.planningState = null;
   state.agentPendingMessage = null;
   state.agentSending = false;
+  state.activeMemories = [];
+  state.pendingMemories = [];
+  state.memoryStatus = "active";
+  state.editingMemoryId = null;
+  state.memoryLoading = false;
+  state.memoryMutatingId = null;
   state.collapsedTaskIds.clear();
   localStorage.removeItem("planwise_token");
   localStorage.removeItem("planwise_user");
+  localStorage.removeItem(AGENT_SESSION_STORAGE_KEY);
 }
 
 async function refreshToken() {
@@ -316,7 +353,9 @@ async function api(path, options = {}, retry = true) {
       credentials: "include",
     });
   } catch {
-    throw new Error("无法连接后端服务");
+    const error = new Error("无法连接后端服务");
+    error.isNetworkError = true;
+    throw error;
   }
 
   if (response.status === 401 && retry) {
@@ -335,7 +374,11 @@ async function api(path, options = {}, retry = true) {
     const details = Array.isArray(payload.data)
       ? payload.data.map((item) => item.message).join("；")
       : "";
-    throw new Error(details || payload.message || "请求失败");
+    const error = new Error(
+      details || payload.message || "请求失败",
+    );
+    error.status = response.status;
+    throw error;
   }
   return payload.data;
 }
@@ -353,6 +396,144 @@ function showApp() {
 
 function closeDialog(dialog) {
   if (dialog.open) dialog.close();
+}
+
+function updatePendingMemoryBadge() {
+  const count = state.pendingMemories.length;
+  $("pendingMemoryBadge").textContent = count;
+  $("pendingMemoryBadge").classList.toggle("hidden", count === 0);
+  $("pendingMemoryTabCount").textContent = count;
+}
+
+function memoryCategoryOptions(selectedCategory) {
+  return Object.entries(MEMORY_CATEGORY_LABELS)
+    .map(([value, label]) => (
+      `<option value="${value}" ${value === selectedCategory ? "selected" : ""}>${label}</option>`
+    ))
+    .join("");
+}
+
+function renderMemoryCard(memory) {
+  const isPending = memory.status === "pending";
+  const isEditing = !isPending && state.editingMemoryId === memory.memory_id;
+  const isMutating = state.memoryMutatingId === memory.memory_id;
+  const category = MEMORY_CATEGORY_LABELS[memory.category] || memory.category;
+  const source = MEMORY_SOURCE_LABELS[memory.source] || memory.source;
+  const updatedAt = formatDateTimeLabel(memory.updated_time);
+
+  if (isEditing) {
+    return `
+      <article class="memory-card">
+        <form class="memory-edit-form" data-memory-edit-form="${memory.memory_id}">
+          <label>
+            <span>分类</span>
+            <select name="category">${memoryCategoryOptions(memory.category)}</select>
+          </label>
+          <label>
+            <span>记忆内容</span>
+            <textarea name="content" maxlength="1000" required>${escapeHtml(memory.content)}</textarea>
+          </label>
+          <div class="memory-edit-actions">
+            <button class="text-button" data-cancel-memory-edit="${memory.memory_id}" type="button">取消</button>
+            <button class="primary-button" type="submit" ${isMutating ? "disabled" : ""}>${isMutating ? "保存中…" : "保存"}</button>
+          </div>
+        </form>
+      </article>
+    `;
+  }
+
+  return `
+    <article class="memory-card ${isPending ? "pending" : ""}">
+      <div class="memory-card-head">
+        <div class="memory-card-meta">
+          <span class="memory-category">${escapeHtml(category)}</span>
+          <span>${escapeHtml(source)}</span>
+        </div>
+        <span class="memory-card-meta">${escapeHtml(updatedAt)}</span>
+      </div>
+      <p class="memory-card-content">${escapeHtml(memory.content)}</p>
+      <div class="memory-card-actions">
+        ${isPending ? `
+          <button class="text-button memory-reject" data-reject-memory="${memory.memory_id}" type="button" ${isMutating ? "disabled" : ""}>忽略</button>
+          <button class="text-button memory-approve" data-approve-memory="${memory.memory_id}" type="button" ${isMutating ? "disabled" : ""}>${isMutating ? "处理中…" : "确认记住"}</button>
+        ` : `
+          <button class="text-button" data-edit-memory="${memory.memory_id}" type="button">编辑</button>
+          <button class="text-button memory-archive" data-archive-memory="${memory.memory_id}" type="button" ${isMutating ? "disabled" : ""}>归档</button>
+        `}
+      </div>
+    </article>
+  `;
+}
+
+function renderMemories() {
+  updatePendingMemoryBadge();
+  const memories = state.memoryStatus === "pending"
+    ? state.pendingMemories
+    : state.activeMemories;
+
+  document.querySelectorAll("[data-memory-status]").forEach((button) => {
+    const active = button.dataset.memoryStatus === state.memoryStatus;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
+  });
+  $("memoryListSummary").textContent = `${memories.length} 条记忆`;
+  $("memoryList").innerHTML = state.memoryLoading
+    ? `<div class="memory-loading"><i></i><span>正在读取记忆…</span></div>`
+    : memories.map(renderMemoryCard).join("");
+
+  const empty = !state.memoryLoading && memories.length === 0;
+  $("memoryEmpty").classList.toggle("hidden", !empty);
+  $("memoryEmptyTitle").textContent = state.memoryStatus === "pending"
+    ? "没有待确认的记忆"
+    : "还没有长期记忆";
+  $("memoryEmptyDescription").textContent = state.memoryStatus === "pending"
+    ? "Agent 从对话中提取的候选记忆会出现在这里。"
+    : "用自然语言告诉 Agent 你的长期偏好或约束。";
+}
+
+async function refreshPendingMemories() {
+  state.pendingMemories = await api("/api/memories?status=pending") || [];
+  updatePendingMemoryBadge();
+  if ($("memoryDialog").open && state.memoryStatus === "pending") {
+    renderMemories();
+  }
+}
+
+async function loadMemories() {
+  state.memoryLoading = true;
+  $("memoryListError").textContent = "";
+  renderMemories();
+  try {
+    const [activeMemories, pendingMemories] = await Promise.all([
+      api("/api/memories?status=active"),
+      api("/api/memories?status=pending"),
+    ]);
+    state.activeMemories = activeMemories || [];
+    state.pendingMemories = pendingMemories || [];
+  } finally {
+    state.memoryLoading = false;
+    renderMemories();
+  }
+}
+
+function openMemoryDialog() {
+  state.editingMemoryId = null;
+  $("memoryIngestError").textContent = "";
+  $("memoryListError").textContent = "";
+  renderMemories();
+  $("memoryDialog").showModal();
+  loadMemories().catch((error) => {
+    $("memoryListError").textContent = error.message;
+  });
+}
+
+function memoryIngestSummary(result) {
+  const created = result?.created?.length || 0;
+  const updated = result?.updated?.length || 0;
+  if (created && updated) return `新增 ${created} 条，更新 ${updated} 条长期记忆`;
+  if (created) return `已保存 ${created} 条长期记忆`;
+  if (updated) return `已更新 ${updated} 条长期记忆`;
+  return "没有发现需要新增或更新的长期记忆";
 }
 
 function renderAgentList(values, emptyText = "尚未确认") {
@@ -424,18 +605,105 @@ function renderAgentTaskList(tasks = []) {
   `).join("");
 }
 
-function applyAgentTurnResult(result) {
-  if (!result?.session || !result.session.state) {
+function validateAgentSession(session) {
+  if (
+    !session?.state
+    || !Number.isInteger(session.session_id)
+    || session.session_id <= 0
+  ) {
     throw new Error("Agent 返回的数据不完整，请稍后重试");
   }
-  state.agentSessionId = result.session.session_id;
-  state.planningState = result.session.state;
-  $("agentConfirmFeedback").value = "";
-  $("agentConfirmError").textContent = "";
+  return session;
 }
 
-function getExecutedProjectId(result) {
-  const executionState = result?.session?.state;
+function applyAgentSession(session) {
+  const validSession = validateAgentSession(session);
+  state.agentSessionId = validSession.session_id;
+  state.planningState = validSession.state;
+  localStorage.setItem(
+    AGENT_SESSION_STORAGE_KEY,
+    String(validSession.session_id),
+  );
+  $("agentConfirmFeedback").value = "";
+  $("agentConfirmError").textContent = "";
+  return validSession;
+}
+
+function forgetAgentSession() {
+  state.agentSessionId = null;
+  localStorage.removeItem(AGENT_SESSION_STORAGE_KEY);
+}
+
+function applyAgentTurnResult(result) {
+  return applyAgentSession(result?.session);
+}
+
+function agentStateFingerprint(planningState) {
+  return JSON.stringify(planningState || null);
+}
+
+function waitForAgentRecovery() {
+  return new Promise((resolve) => {
+    setTimeout(resolve, AGENT_RECOVERY_INTERVAL_MS);
+  });
+}
+
+function shouldRecoverAgentSession(error) {
+  return Boolean(
+    error?.isNetworkError
+    || error?.status === 409
+    || error?.status === 504,
+  );
+}
+
+async function requestAgentSession() {
+  if (!state.agentSessionId) return null;
+  const session = await api(
+    `/api/agent/${encodeURIComponent(state.agentSessionId)}`,
+  );
+  return validateAgentSession(session);
+}
+
+async function synchronizeAgentSession() {
+  try {
+    const session = await requestAgentSession();
+    return session ? applyAgentSession(session) : null;
+  } catch (error) {
+    if (error.status === 404) {
+      forgetAgentSession();
+      state.planningState = null;
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function recoverAgentSession(previousStateFingerprint) {
+  for (let attempt = 0; attempt < AGENT_RECOVERY_ATTEMPTS; attempt += 1) {
+    if (!state.agentSessionId || !state.token) return null;
+    try {
+      const session = await requestAgentSession();
+      if (
+        session
+        && agentStateFingerprint(session.state)
+          !== previousStateFingerprint
+      ) {
+        return applyAgentSession(session);
+      }
+    } catch (error) {
+      if (error.status === 404) {
+        forgetAgentSession();
+        return null;
+      }
+    }
+    if (attempt < AGENT_RECOVERY_ATTEMPTS - 1) {
+      await waitForAgentRecovery();
+    }
+  }
+  return null;
+}
+
+function getExecutedProjectIdFromState(executionState) {
   const projectId = executionState?.execution?.project_id;
   if (
     executionState?.phase !== "completed"
@@ -445,6 +713,21 @@ function getExecutedProjectId(result) {
     throw new Error("项目尚未完成创建，请稍后重试");
   }
   return projectId;
+}
+
+function getExecutedProjectId(result) {
+  return getExecutedProjectIdFromState(result?.session?.state);
+}
+
+async function showExecutedAgentProject(projectId) {
+  try {
+    await loadProjects();
+    await selectProject(projectId);
+    showToast("项目与任务已创建");
+  } catch {
+    showToast("项目已创建，请刷新项目列表");
+  }
+  closeDialog($("agentDialog"));
 }
 
 function renderAgent() {
@@ -512,7 +795,6 @@ function renderAgent() {
   $("agentForm").classList.toggle("hidden", conversationLocked);
   $("agentConfirmBar").classList.toggle("hidden", !awaitingConfirmation);
 
-  $("agentStateJson").textContent = JSON.stringify(planningState, null, 2);
   $("agentMessage").disabled = state.agentSending || conversationLocked;
   $("agentSubmitButton").disabled = state.agentSending || conversationLocked;
   $("resetAgentButton").disabled = state.agentSending;
@@ -540,10 +822,26 @@ function openAgentDialog() {
   renderAgent();
   $("agentDialog").showModal();
   focusAgentControl();
+
+  if (!state.agentSessionId) return;
+  state.agentSending = true;
+  renderAgent();
+  synchronizeAgentSession()
+    .then((session) => {
+      if (!session) state.planningState = createPlanningState();
+    })
+    .catch((error) => {
+      $("agentError").textContent = error.message;
+    })
+    .finally(() => {
+      state.agentSending = false;
+      renderAgent();
+      if ($("agentDialog").open) focusAgentControl();
+    });
 }
 
 function resetAgentSession() {
-  state.agentSessionId = null;
+  forgetAgentSession();
   state.planningState = createPlanningState();
   state.agentPendingMessage = null;
   $("agentMessage").value = "";
@@ -567,6 +865,9 @@ async function submitAgentConfirmation(approved) {
 
   $("agentConfirmError").textContent = "";
   state.agentSending = true;
+  const previousStateFingerprint = agentStateFingerprint(
+    state.planningState,
+  );
   renderAgent();
 
   try {
@@ -582,20 +883,41 @@ async function submitAgentConfirmation(approved) {
     );
     const projectId = approved ? getExecutedProjectId(result) : null;
     applyAgentTurnResult(result);
+    refreshPendingMemories().catch(() => {});
     if (approved) {
-      try {
-        await loadProjects();
-        await selectProject(projectId);
-        showToast("项目与任务已创建");
-      } catch {
-        showToast("项目已创建，请刷新项目列表");
-      }
-      closeDialog($("agentDialog"));
+      await showExecutedAgentProject(projectId);
     } else {
       showToast("计划已退回并重新评审");
     }
   } catch (error) {
-    $("agentConfirmError").textContent = error.message;
+    let recoveredSession = null;
+    if (
+      state.agentSessionId
+      && shouldRecoverAgentSession(error)
+    ) {
+      $("agentConfirmError").textContent = "连接中断，正在同步会话状态…";
+      recoveredSession = await recoverAgentSession(
+        previousStateFingerprint,
+      );
+    }
+
+    if (recoveredSession) {
+      refreshPendingMemories().catch(() => {});
+      if (
+        approved
+        && recoveredSession.state.phase === "completed"
+      ) {
+        const projectId = getExecutedProjectIdFromState(
+          recoveredSession.state,
+        );
+        await showExecutedAgentProject(projectId);
+      } else {
+        $("agentConfirmError").textContent = "";
+        showToast("已同步会话最新状态");
+      }
+    } else {
+      $("agentConfirmError").textContent = error.message;
+    }
   } finally {
     state.agentSending = false;
     renderAgent();
@@ -892,6 +1214,14 @@ async function boot() {
     showApp();
     await loadProjects();
     await loadTasks();
+    if (state.agentSessionId) {
+      try {
+        await synchronizeAgentSession();
+      } catch (error) {
+        showToast(`会话状态恢复失败：${error.message}`);
+      }
+    }
+    refreshPendingMemories().catch(() => {});
   } catch (error) {
     if (!state.token) return;
     showToast(error.message);
@@ -956,6 +1286,130 @@ $("profileForm").addEventListener("submit", async (event) => {
   }
 });
 
+$("openMemoryButton").addEventListener("click", openMemoryDialog);
+$("closeMemoryButton").addEventListener("click", () => closeDialog($("memoryDialog")));
+
+$("memoryIngestForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const text = $("memoryText").value.trim();
+  if (!text) return;
+
+  $("memoryIngestError").textContent = "";
+  $("memoryIngestButton").disabled = true;
+  $("memoryIngestButton").textContent = "提取中…";
+  try {
+    const result = await api("/api/memories/ingest", {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    });
+    $("memoryIngestForm").reset();
+    state.memoryStatus = "active";
+    state.editingMemoryId = null;
+    await loadMemories();
+    showToast(memoryIngestSummary(result));
+  } catch (error) {
+    $("memoryIngestError").textContent = error.message;
+  } finally {
+    $("memoryIngestButton").disabled = false;
+    $("memoryIngestButton").textContent = "提取并保存";
+  }
+});
+
+$("memoryDialog").addEventListener("click", (event) => {
+  const tab = event.target.closest("[data-memory-status]");
+  if (!tab) return;
+  state.memoryStatus = tab.dataset.memoryStatus;
+  state.editingMemoryId = null;
+  $("memoryListError").textContent = "";
+  renderMemories();
+});
+
+$("memoryList").addEventListener("submit", async (event) => {
+  const form = event.target.closest("[data-memory-edit-form]");
+  if (!form) return;
+  event.preventDefault();
+
+  const memoryId = Number(form.dataset.memoryEditForm);
+  const category = form.elements.category.value;
+  const content = form.elements.content.value.trim();
+  if (!content) return;
+
+  state.memoryMutatingId = memoryId;
+  $("memoryListError").textContent = "";
+  renderMemories();
+  try {
+    await api(`/api/memories/${memoryId}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        category,
+        content,
+      }),
+    });
+    state.editingMemoryId = null;
+    await loadMemories();
+    showToast("长期记忆已更新");
+  } catch (error) {
+    $("memoryListError").textContent = error.message;
+  } finally {
+    state.memoryMutatingId = null;
+    renderMemories();
+  }
+});
+
+$("memoryList").addEventListener("click", async (event) => {
+  const editButton = event.target.closest("[data-edit-memory]");
+  const cancelButton = event.target.closest("[data-cancel-memory-edit]");
+  const approveButton = event.target.closest("[data-approve-memory]");
+  const rejectButton = event.target.closest("[data-reject-memory]");
+  const archiveButton = event.target.closest("[data-archive-memory]");
+
+  if (editButton) {
+    state.editingMemoryId = Number(editButton.dataset.editMemory);
+    renderMemories();
+    return;
+  }
+  if (cancelButton) {
+    state.editingMemoryId = null;
+    renderMemories();
+    return;
+  }
+
+  const memoryId = Number(
+    approveButton?.dataset.approveMemory
+    || rejectButton?.dataset.rejectMemory
+    || archiveButton?.dataset.archiveMemory,
+  );
+  if (!memoryId || state.memoryMutatingId !== null) return;
+  if (archiveButton && !window.confirm("归档后这条记忆将不再参与规划，确定继续吗？")) return;
+
+  state.memoryMutatingId = memoryId;
+  $("memoryListError").textContent = "";
+  renderMemories();
+  try {
+    if (approveButton || rejectButton) {
+      await api(`/api/memories/${memoryId}/confirmation`, {
+        method: "POST",
+        body: JSON.stringify({ approved: Boolean(approveButton) }),
+      });
+    } else if (archiveButton) {
+      await api(`/api/memories/${memoryId}`, { method: "DELETE" });
+    }
+    await loadMemories();
+    showToast(
+      approveButton
+        ? "记忆已确认并生效"
+        : rejectButton
+          ? "候选记忆已忽略"
+          : "长期记忆已归档",
+    );
+  } catch (error) {
+    $("memoryListError").textContent = error.message;
+  } finally {
+    state.memoryMutatingId = null;
+    renderMemories();
+  }
+});
+
 $("openAgentButton").addEventListener("click", openAgentDialog);
 $("closeAgentButton").addEventListener("click", () => closeDialog($("agentDialog")));
 $("resetAgentButton").addEventListener("click", resetAgentSession);
@@ -983,6 +1437,9 @@ $("agentForm").addEventListener("submit", async (event) => {
   const message = $("agentMessage").value.trim();
   if (!message) return;
   if (!state.planningState) state.planningState = createPlanningState();
+  const previousStateFingerprint = agentStateFingerprint(
+    state.planningState,
+  );
 
   $("agentError").textContent = "";
   state.agentSending = true;
@@ -1000,10 +1457,30 @@ $("agentForm").addEventListener("submit", async (event) => {
         body: JSON.stringify({ message }),
       });
     applyAgentTurnResult(result);
+    refreshPendingMemories().catch(() => {});
     $("agentMessage").value = "";
     $("agentCharacterCount").textContent = "0 / 5000";
   } catch (error) {
-    $("agentError").textContent = error.message;
+    let recoveredSession = null;
+    if (
+      state.agentSessionId
+      && shouldRecoverAgentSession(error)
+    ) {
+      $("agentError").textContent = "连接中断，正在同步会话状态…";
+      recoveredSession = await recoverAgentSession(
+        previousStateFingerprint,
+      );
+    }
+
+    if (recoveredSession) {
+      $("agentMessage").value = "";
+      $("agentCharacterCount").textContent = "0 / 5000";
+      $("agentError").textContent = "";
+      refreshPendingMemories().catch(() => {});
+      showToast("已同步会话最新状态");
+    } else {
+      $("agentError").textContent = error.message;
+    }
   } finally {
     state.agentPendingMessage = null;
     state.agentSending = false;
@@ -1262,7 +1739,7 @@ $("taskList").addEventListener("click", async (event) => {
   }
 });
 
-[$("profileDialog"), $("projectDialog"), $("agentDialog")].forEach((dialog) => {
+[$("profileDialog"), $("projectDialog"), $("memoryDialog"), $("agentDialog")].forEach((dialog) => {
   dialog.addEventListener("click", (event) => {
     if (event.target === dialog) closeDialog(dialog);
   });

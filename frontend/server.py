@@ -11,7 +11,7 @@ from urllib.request import Request, urlopen
 
 FRONTEND_DIR = Path(__file__).resolve().parent
 DEFAULT_API_TIMEOUT_SECONDS = 15
-AGENT_API_TIMEOUT_SECONDS = 60
+LLM_API_TIMEOUT_SECONDS = 300
 
 
 class FrontendHandler(SimpleHTTPRequestHandler):
@@ -55,9 +55,14 @@ class FrontendHandler(SimpleHTTPRequestHandler):
             headers=headers,
             method=self.command,
         )
+        uses_llm = self.command != "GET" and (
+            self.path.startswith("/api/agent/")
+            or self.path == "/api/memories/ingest"
+            or self.path.endswith("/confirmation")
+        )
         timeout = (
-            AGENT_API_TIMEOUT_SECONDS
-            if self.path.startswith("/api/agent/")
+            LLM_API_TIMEOUT_SECONDS
+            if uses_llm
             else DEFAULT_API_TIMEOUT_SECONDS
         )
 
@@ -66,9 +71,31 @@ class FrontendHandler(SimpleHTTPRequestHandler):
                 self._relay(response.status, response.headers, response.read())
         except HTTPError as error:
             self._relay(error.code, error.headers, error.read())
-        except URLError:
-            payload = b'{"detail":"Cannot connect to FastAPI. Start it on port 8000."}'
-            self._relay(502, {"Content-Type": "application/json"}, payload)
+        except (TimeoutError, URLError) as error:
+            timed_out = isinstance(error, TimeoutError) or isinstance(
+                getattr(error, "reason", None),
+                TimeoutError,
+            )
+            if timed_out:
+                payload = (
+                    '{"success":false,"message":"Agent 处理时间过长，后端可能仍在完成当前会话，请勿重复发送",'
+                    '"data":null}'
+                ).encode("utf-8")
+                self._relay(
+                    504,
+                    {"Content-Type": "application/json; charset=utf-8"},
+                    payload,
+                )
+                return
+            payload = (
+                '{"success":false,"message":"无法连接后端服务",'
+                '"data":null}'
+            ).encode("utf-8")
+            self._relay(
+                502,
+                {"Content-Type": "application/json; charset=utf-8"},
+                payload,
+            )
 
     def _relay(self, status: int, headers, body: bytes) -> None:
         self.send_response(status)

@@ -1,7 +1,9 @@
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
+from agent.state import AgentPhase, Message, MessageRole, State
 from dependencies.agent import get_agent_flow, get_memory_extractor
 from exceptions.agent import (
     AgentSessionNotAwaitingConfirmationError,
@@ -22,6 +24,73 @@ def fake_memory_extractor():
         get_memory_extractor
     ] = override_get_memory_extractor
     return extractor
+
+
+def test_get_agent_session_returns_latest_state(
+    client,
+    fake_user,
+    fake_db,
+    monkeypatch,
+):
+    state = State(
+        messages=[
+            Message(role=MessageRole.USER, content="帮我规划学习"),
+            Message(role=MessageRole.ASSISTANT, content="请确认计划"),
+        ],
+        phase=AgentPhase.CONFIRMING,
+        next_action=None,
+    )
+    agent_session = SimpleNamespace(
+        session_id=7,
+        state_json=state.model_dump_json(),
+    )
+    mock_service = AsyncMock(return_value=agent_session)
+    monkeypatch.setattr(
+        "router.agent.get_agent_session_by_session_id_for_user",
+        mock_service,
+    )
+
+    response = client.get("/api/agent/7")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["message"] == "Agent 会话获取成功"
+    assert payload["data"]["session_id"] == 7
+    assert payload["data"]["state"]["phase"] == "confirming"
+    mock_service.assert_awaited_once_with(
+        7,
+        fake_user.user_id,
+        fake_db,
+    )
+
+
+def test_get_agent_session_not_found_returns_404(
+    client,
+    fake_user,
+    fake_db,
+    monkeypatch,
+):
+    mock_service = AsyncMock(
+        side_effect=AgentSessionNotFoundError(),
+    )
+    monkeypatch.setattr(
+        "router.agent.get_agent_session_by_session_id_for_user",
+        mock_service,
+    )
+
+    response = client.get("/api/agent/7")
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "success": False,
+        "message": "Agent 会话不存在",
+        "data": None,
+    }
+    mock_service.assert_awaited_once_with(
+        7,
+        fake_user.user_id,
+        fake_db,
+    )
 
 
 def test_resume_agent_session_not_found_returns_404(

@@ -81,6 +81,11 @@
           <span>归档项目</span><span id="archiveCount">0</span>
         </button>
 
+        <button class="memory-nav" id="openMemoryButton" type="button">
+          <span class="memory-nav-label"><i>M</i>长期记忆</span>
+          <span class="memory-count hidden" id="pendingMemoryBadge">0</span>
+        </button>
+
         <button class="agent-teaser" id="openAgentButton" type="button">
           <span class="agent-icon">···</span>
           <strong>规划助手</strong>
@@ -267,6 +272,51 @@
     </form>
   </dialog>
 
+  <dialog class="modal memory-dialog" id="memoryDialog" aria-labelledby="memoryDialogTitle">
+    <div class="memory-shell">
+      <header class="modal-heading memory-heading">
+        <div>
+          <p class="eyebrow">MEMORY</p>
+          <h2 id="memoryDialogTitle">长期记忆</h2>
+          <p>管理会在之后规划中持续生效的个人信息、偏好和约束。</p>
+        </div>
+        <button class="modal-close" id="closeMemoryButton" type="button" aria-label="关闭">×</button>
+      </header>
+
+      <form class="memory-ingest" id="memoryIngestForm">
+        <label for="memoryText">告诉 Agent 需要长期记住什么</label>
+        <textarea
+          id="memoryText"
+          maxlength="5000"
+          placeholder="例如：工作日每天最多安排 2 小时，周末不安排学习任务。"
+          required
+        ></textarea>
+        <div class="memory-ingest-footer">
+          <p class="form-error" id="memoryIngestError" role="alert"></p>
+          <button class="primary-button" id="memoryIngestButton" type="submit">提取并保存</button>
+        </div>
+      </form>
+
+      <div class="memory-toolbar">
+        <div class="memory-tabs" role="tablist" aria-label="记忆状态">
+          <button class="active" data-memory-status="active" type="button" role="tab" aria-selected="true">已生效</button>
+          <button data-memory-status="pending" type="button" role="tab" aria-selected="false">
+            待确认 <span id="pendingMemoryTabCount">0</span>
+          </button>
+        </div>
+        <span id="memoryListSummary">0 条记忆</span>
+      </div>
+
+      <div class="memory-list" id="memoryList"></div>
+      <div class="memory-empty hidden" id="memoryEmpty">
+        <span>◎</span>
+        <strong id="memoryEmptyTitle">还没有长期记忆</strong>
+        <p id="memoryEmptyDescription">用自然语言告诉 Agent 你的长期偏好或约束。</p>
+      </div>
+      <p class="form-error memory-list-error" id="memoryListError" role="alert"></p>
+    </div>
+  </dialog>
+
   <dialog class="agent-dialog" id="agentDialog" aria-labelledby="agentDialogTitle">
     <div class="agent-shell">
       <header class="agent-header">
@@ -366,11 +416,6 @@
             <p class="agent-review-summary" id="agentReviewSummary"></p>
             <ul class="agent-review-findings" id="agentReviewFindings"></ul>
           </section>
-
-          <details class="agent-debug">
-            <summary>查看 PlanningState JSON</summary>
-            <pre id="agentStateJson"></pre>
-          </details>
         </aside>
       </div>
     </div>

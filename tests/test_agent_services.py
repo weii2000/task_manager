@@ -137,6 +137,52 @@ def test_memory_extraction_failure_does_not_fail_agent_turn(
     extract_pending.assert_awaited_once()
 
 
+def test_get_agent_session_returns_owned_session(monkeypatch):
+    state = State(
+        messages=[Message(role=MessageRole.USER, content="帮我规划学习")]
+    )
+    agent_session = SimpleNamespace(
+        session_id=7,
+        state_json=state.model_dump_json(),
+    )
+    get_session = AsyncMock(return_value=agent_session)
+    monkeypatch.setattr(
+        agent_service,
+        "get_agent_session_by_session_id_and_user_id",
+        get_session,
+    )
+    db = make_db_with_transaction()
+
+    result = asyncio.run(
+        agent_service.get_agent_session_by_session_id_for_user(
+            session_id=7,
+            user_id=3,
+            db=db,
+        )
+    )
+
+    assert result is agent_session
+    get_session.assert_awaited_once_with(7, 3, db)
+
+
+def test_get_agent_session_not_found_raises(monkeypatch):
+    monkeypatch.setattr(
+        agent_service,
+        "get_agent_session_by_session_id_and_user_id",
+        AsyncMock(return_value=None),
+    )
+    db = make_db_with_transaction()
+
+    with pytest.raises(AgentSessionNotFoundError):
+        asyncio.run(
+            agent_service.get_agent_session_by_session_id_for_user(
+                session_id=7,
+                user_id=3,
+                db=db,
+            )
+        )
+
+
 def test_resume_agent_session_not_found_raises(monkeypatch):
     db = make_db_with_transaction()
     flow = MagicMock()

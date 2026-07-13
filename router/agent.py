@@ -19,11 +19,21 @@ from schemas.response import ApiResponse
 from services.agent import (
     confirm_agent_session_for_user,
     create_agent_session_for_user,
+    get_agent_session_by_session_id_for_user,
     resume_agent_session_by_session_id_for_user,
 )
 
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
+
+
+def build_agent_session_read(
+    agent_session: AgentSession,
+) -> AgentSessionRead:
+    return AgentSessionRead(
+        session_id=agent_session.session_id,
+        state=State.model_validate_json(agent_session.state_json),
+    )
 
 
 def build_agent_response(
@@ -32,10 +42,7 @@ def build_agent_response(
 ) -> ApiResponse[AgentTurnResponse]:
     return ApiResponse[AgentTurnResponse](
         data=AgentTurnResponse(
-            session=AgentSessionRead(
-                session_id=agent_session.session_id,
-                state=State.model_validate_json(agent_session.state_json),
-            ),
+            session=build_agent_session_read(agent_session),
             response=response,
         )
     )
@@ -79,6 +86,26 @@ async def resume_agent_session_by_session_id_for_user_api(
         )
     )
     return build_agent_response(agent_session, response)
+
+
+@router.get(
+    "/{session_id}",
+    response_model=ApiResponse[AgentSessionRead],
+)
+async def get_agent_session_for_user_api(
+    session_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[AgentSessionRead]:
+    agent_session = await get_agent_session_by_session_id_for_user(
+        session_id,
+        current_user.user_id,
+        db,
+    )
+    return ApiResponse[AgentSessionRead](
+        message="Agent 会话获取成功",
+        data=build_agent_session_read(agent_session),
+    )
 
 
 @router.post(

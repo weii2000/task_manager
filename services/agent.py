@@ -75,6 +75,26 @@ async def create_agent_session_for_user(
     return agent_session, response
 
 
+async def get_agent_session_by_session_id_for_user(
+    session_id: int,
+    user_id: int,
+    db: AsyncSession,
+) -> AgentSession:
+    async with db.begin():
+        agent_session = (
+            await get_agent_session_by_session_id_and_user_id(
+                session_id,
+                user_id,
+                db,
+            )
+        )
+
+    if agent_session is None:
+        raise AgentSessionNotFoundError()
+
+    return agent_session
+
+
 async def resume_agent_session_by_session_id_for_user(
     request: AgentTurnRequest,
     session_id: int,
