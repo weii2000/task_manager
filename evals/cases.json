@@ -1,0 +1,587 @@
+{
+  "name": "core-agent",
+  "version": "1.4",
+  "cases": [
+    {
+      "case_id": "plan_ambiguous_goal_clarifies",
+      "description": "A vague learning goal should trigger one focused clarification question.",
+      "target": "plan",
+      "input": {
+        "messages": [
+          {
+            "role": "user",
+            "content": "我想学 Python，帮我做个计划。"
+          }
+        ]
+      },
+      "expected": {
+        "allowed_actions": ["clarify"],
+        "min_question_count": 1,
+        "max_question_count": 1
+      }
+    },
+    {
+      "case_id": "plan_complete_goal_builds_draft",
+      "description": "A complete goal should produce an actionable draft without another clarification round.",
+      "target": "plan",
+      "input": {
+        "messages": [
+          {
+            "role": "user",
+            "content": "请制定一个四周学习计划，目标是独立完成一个使用 FastAPI、SQLAlchemy 和 pytest 的任务管理 API。每天最多投入 1 小时。完成标准是能够注册登录、创建项目和任务，并且核心接口有自动化测试。请直接给出可执行计划。"
+          }
+        ]
+      },
+      "expected": {
+        "allowed_actions": ["review"],
+        "require_project": true,
+        "min_task_count": 3,
+        "max_task_count": 20,
+        "min_acceptance_criteria_coverage": 0.6,
+        "required_constraints": [
+          {
+            "concept_groups": [
+              ["每天", "每日", "每个工作日"],
+              ["最多", "不超过", "至多"],
+              ["1小时", "一小时", "一个小时"]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "plan_respects_explicit_project_window",
+      "description": "Explicit start and due times should be represented and bound the generated tasks.",
+      "target": "plan",
+      "input": {
+        "messages": [
+          {
+            "role": "user",
+            "content": "帮我规划一个 FastAPI 任务管理 API 作品集项目，实现 JWT 注册登录、项目 CRUD、任务 CRUD 和用户数据隔离。项目从 2026-08-01 09:00（UTC+8）开始，必须在 2026-08-28 18:00（UTC+8）前完成。计划需要包含需求设计、API 实现、测试和部署说明，验收标准是仓库可以按文档启动，核心接口测试通过，并且用户不能访问他人的项目和任务。"
+          }
+        ]
+      },
+      "expected": {
+        "allowed_actions": ["review"],
+        "require_project": true,
+        "require_project_start_time": true,
+        "require_project_due_time": true,
+        "tasks_within_project_window": true,
+        "min_task_count": 4,
+        "min_acceptance_criteria_coverage": 0.5
+      }
+    },
+    {
+      "case_id": "plan_requests_duplicate_lookup",
+      "description": "An explicit duplicate-project check should select the project-list tool.",
+      "target": "plan",
+      "input": {
+        "messages": [
+          {
+            "role": "user",
+            "content": "我想建立一个 AI Agent 求职准备项目，但在继续规划前，请先检查它是否和我已有的项目重复。"
+          }
+        ]
+      },
+      "expected": {
+        "allowed_actions": ["use_tool"],
+        "required_tool": "list_user_projects"
+      }
+    },
+    {
+      "case_id": "plan_fixes_previous_review",
+      "description": "A blocking review about unverifiable tasks should be fixed before resubmission.",
+      "target": "plan",
+      "input": {
+        "messages": [
+          {
+            "role": "user",
+            "content": "我要在两周内完成一个带 JWT 登录和任务 CRUD 的 FastAPI API。项目完成时需要核心接口测试全部通过。"
+          }
+        ],
+        "info": {
+          "goal": "两周内完成带 JWT 登录和任务 CRUD 的 FastAPI API",
+          "acceptance_criteria": "核心接口测试全部通过",
+          "constraints": ["两周内完成"]
+        },
+        "draft": {
+          "project": {
+            "title": "FastAPI 任务 API"
+          },
+          "tasks": [
+            {
+              "title": "实现用户认证"
+            },
+            {
+              "title": "实现任务 CRUD"
+            }
+          ]
+        },
+        "previous_review": {
+          "summary": "任务缺少可验证的完成标准。",
+          "findings": [
+            {
+              "category": "completeness",
+              "severity": "blocking",
+              "description": "所有任务的 acceptance_criteria 都为空。",
+              "evidence": ["两个任务均未提供验收标准"],
+              "suggestion": "为每项任务补充可通过测试或行为验证的验收标准。"
+            }
+          ]
+        },
+        "revision_count": 1
+      },
+      "expected": {
+        "allowed_actions": ["review"],
+        "require_project": true,
+        "min_task_count": 2,
+        "min_acceptance_criteria_coverage": 1.0
+      }
+    },
+    {
+      "case_id": "plan_applies_long_term_constraints",
+      "description": "Active long-term constraints should be applied directly when the requested scope is feasible.",
+      "target": "plan",
+      "input": {
+        "messages": [
+          {
+            "role": "user",
+            "content": "请规划 2026-07-14 到 2026-07-27 的后端学习项目。我已经有一个可以启动并配置好 pytest 的 FastAPI 项目骨架，本次只实现简单的任务创建、列表和状态更新接口。验收标准是这三个接口的成功及非法输入测试通过，并补充对应 README。"
+          }
+        ],
+        "long_term_memories": [
+          {
+            "memory_id": 101,
+            "category": "constraint",
+            "content": "用户工作日每天最多学习一小时。"
+          },
+          {
+            "memory_id": 102,
+            "category": "constraint",
+            "content": "用户周末不安排学习任务。"
+          }
+        ]
+      },
+      "expected": {
+        "allowed_actions": ["review"],
+        "require_project": true,
+        "min_task_count": 3,
+        "required_constraints": [
+          {
+            "concept_groups": [
+              ["工作日"],
+              ["每天", "每日", "每个工作日"],
+              ["最多", "不超过", "至多"],
+              ["1小时", "一小时", "一个小时"]
+            ]
+          },
+          {
+            "concept_groups": [
+              ["周末", "周六周日"],
+              ["不安排", "不学习"]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "plan_clarifies_infeasible_memory_conflict",
+      "description": "A plan should surface a concrete feasibility conflict instead of ignoring active constraints.",
+      "target": "plan",
+      "input": {
+        "messages": [
+          {
+            "role": "user",
+            "content": "请规划 2026-07-14 到 2026-07-27 的后端学习项目。我需要从零完成一个生产级 FastAPI 系统，包括 JWT 与刷新令牌、项目和任务 CRUD、完整权限隔离、MySQL 迁移、核心成功及失败路径测试、Docker 部署和运维文档。"
+          }
+        ],
+        "long_term_memories": [
+          {
+            "memory_id": 101,
+            "category": "constraint",
+            "content": "用户工作日每天最多学习一小时。"
+          },
+          {
+            "memory_id": 102,
+            "category": "constraint",
+            "content": "用户周末不安排学习任务。"
+          }
+        ]
+      },
+      "expected": {
+        "allowed_actions": ["clarify"],
+        "min_question_count": 1,
+        "required_constraints": [
+          {
+            "concept_groups": [
+              ["工作日"],
+              ["每天", "每日", "每个工作日"],
+              ["最多", "不超过", "至多"],
+              ["1小时", "一小时", "一个小时"]
+            ]
+          },
+          {
+            "concept_groups": [
+              ["周末", "周六周日"],
+              ["不安排", "不学习"]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "review_accepts_complete_plan",
+      "description": "A coherent plan with measurable criteria should be ready for human confirmation.",
+      "target": "review",
+      "input": {
+        "messages": [
+          {
+            "role": "user",
+            "content": "我需要在 2026-08-03 到 2026-08-30（UTC）完成一个 FastAPI 任务管理 API，实现注册登录、项目 CRUD、任务 CRUD 和用户数据隔离，核心成功及失败路径必须有测试，并提供可执行的启动文档。"
+          }
+        ],
+        "info": {
+          "goal": "完成具有认证、项目和任务管理能力的 FastAPI API",
+          "acceptance_criteria": "注册登录、项目 CRUD、任务 CRUD 和用户数据隔离可用，核心成功及失败路径测试通过，并可按 README 启动",
+          "constraints": ["2026-08-03 到 2026-08-30（UTC）完成"]
+        },
+        "draft": {
+          "project": {
+            "title": "FastAPI 任务管理 API",
+            "description": "实现具有 JWT 认证、项目和任务 CRUD、用户数据隔离、自动化测试和启动文档的后端作品集。",
+            "start_time": "2026-08-03T09:00:00Z",
+            "due_time": "2026-08-30T18:00:00Z"
+          },
+          "tasks": [
+            {
+              "title": "初始化项目与开发环境",
+              "description": "创建项目结构，配置依赖、数据库连接、测试环境和基础启动命令。",
+              "acceptance_criteria": "应用和测试数据库均可启动，健康检查接口返回 200，空测试集可以运行。",
+              "priority": "high",
+              "start_time": "2026-08-03T09:00:00Z",
+              "due_time": "2026-08-04T18:00:00Z"
+            },
+            {
+              "title": "确定 API 契约与数据模型",
+              "description": "设计 User、Project、Task 模型以及请求响应 Schema、状态码和所有权规则。",
+              "acceptance_criteria": "模型关系、唯一约束、核心接口和主要失败状态码形成可评审清单。",
+              "priority": "high",
+              "start_time": "2026-08-05T09:00:00Z",
+              "due_time": "2026-08-08T18:00:00Z"
+            },
+            {
+              "title": "实现注册、登录与 JWT 鉴权",
+              "description": "实现密码哈希、注册登录、Token 签发验证和当前用户依赖。",
+              "acceptance_criteria": "有效用户可以注册登录；错误凭证被拒绝；缺少或无效 Token 访问受保护接口返回 401。",
+              "priority": "high",
+              "start_time": "2026-08-10T09:00:00Z",
+              "due_time": "2026-08-14T18:00:00Z"
+            },
+            {
+              "title": "实现项目 CRUD 与所有权校验",
+              "description": "实现项目创建、列表、详情、更新和删除接口，所有查询限定当前用户。",
+              "acceptance_criteria": "项目 CRUD 成功路径通过；用户访问或修改他人项目时返回 404 或 403。",
+              "priority": "high",
+              "start_time": "2026-08-15T09:00:00Z",
+              "due_time": "2026-08-19T18:00:00Z"
+            },
+            {
+              "title": "实现任务 CRUD 与项目关联校验",
+              "description": "实现任务 CRUD，验证父项目属于当前用户，并处理不存在和非法输入。",
+              "acceptance_criteria": "任务 CRUD 成功路径通过；不能在他人项目中创建、读取或修改任务。",
+              "priority": "high",
+              "start_time": "2026-08-20T09:00:00Z",
+              "due_time": "2026-08-24T18:00:00Z"
+            },
+            {
+              "title": "完成回归测试、错误处理与启动文档",
+              "description": "覆盖核心成功和失败路径，统一错误响应，并记录环境变量和启动步骤。",
+              "acceptance_criteria": "注册登录、项目和任务接口的核心测试全部通过，新环境可按 README 完成配置并启动应用。",
+              "priority": "high",
+              "start_time": "2026-08-25T09:00:00Z",
+              "due_time": "2026-08-30T18:00:00Z"
+            }
+          ]
+        },
+        "tool_results": [
+          {
+            "call_id": "seed-project-list",
+            "tool_name": "list_user_projects",
+            "arguments": {},
+            "phase": "reviewing",
+            "status": "success",
+            "output": []
+          }
+        ]
+      },
+      "expected": {
+        "allowed_actions": ["confirm"]
+      }
+    },
+    {
+      "case_id": "review_detects_missing_acceptance_criteria",
+      "description": "A draft with no task-level completion criteria should be returned for revision.",
+      "target": "review",
+      "input": {
+        "messages": [
+          {
+            "role": "user",
+            "content": "帮我规划一个可以作为作品集展示的 FastAPI 项目。"
+          }
+        ],
+        "info": {
+          "goal": "完成可以展示的 FastAPI 项目",
+          "acceptance_criteria": "项目可运行并可演示",
+          "constraints": []
+        },
+        "draft": {
+          "project": {
+            "title": "FastAPI 作品集"
+          },
+          "tasks": [
+            {
+              "title": "设计项目"
+            },
+            {
+              "title": "编写代码"
+            },
+            {
+              "title": "测试项目"
+            }
+          ]
+        },
+        "tool_results": [
+          {
+            "call_id": "seed-project-list",
+            "tool_name": "list_user_projects",
+            "arguments": {},
+            "phase": "reviewing",
+            "status": "success",
+            "output": []
+          }
+        ]
+      },
+      "expected": {
+        "allowed_actions": ["replan"],
+        "required_findings": [
+          {
+            "categories": ["completeness"],
+            "minimum_severity": "warning"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "review_detects_goal_mismatch",
+      "description": "A draft unrelated to the user's goal should be rejected as incomplete or conflicting.",
+      "target": "review",
+      "input": {
+        "messages": [
+          {
+            "role": "user",
+            "content": "我要完成一个带认证和任务 CRUD 的 FastAPI 后端。"
+          }
+        ],
+        "info": {
+          "goal": "完成带认证和任务 CRUD 的 FastAPI 后端",
+          "acceptance_criteria": "认证和任务接口可以运行",
+          "constraints": []
+        },
+        "draft": {
+          "project": {
+            "title": "英语口语提升计划"
+          },
+          "tasks": [
+            {
+              "title": "每天背诵单词",
+              "acceptance_criteria": "每天完成 30 个单词。"
+            },
+            {
+              "title": "参加英语角",
+              "acceptance_criteria": "完成一次 30 分钟对话。"
+            }
+          ]
+        },
+        "tool_results": [
+          {
+            "call_id": "seed-project-list",
+            "tool_name": "list_user_projects",
+            "arguments": {},
+            "phase": "reviewing",
+            "status": "success",
+            "output": []
+          }
+        ]
+      },
+      "expected": {
+        "allowed_actions": ["replan"],
+        "required_findings": [
+          {
+            "categories": ["completeness", "conflict"],
+            "minimum_severity": "warning"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "review_detects_infeasible_schedule",
+      "description": "Several multi-day sequential tasks cannot fit into a one-day project window.",
+      "target": "review",
+      "input": {
+        "messages": [
+          {
+            "role": "user",
+            "content": "我只有 2026-08-01 到 2026-08-02 两天完成这个后端项目。"
+          }
+        ],
+        "info": {
+          "goal": "完成并部署一个完整后端项目",
+          "acceptance_criteria": "认证、业务接口、测试和部署全部完成",
+          "constraints": ["必须在两天内完成"]
+        },
+        "draft": {
+          "project": {
+            "title": "完整后端项目",
+            "start_time": "2026-08-01T00:00:00Z",
+            "due_time": "2026-08-02T23:59:00Z"
+          },
+          "tasks": [
+            {
+              "title": "完成需求分析和数据库设计",
+              "description": "预计需要连续三天完成。",
+              "acceptance_criteria": "评审通过全部数据模型。",
+              "start_time": "2026-08-01T00:00:00Z",
+              "due_time": "2026-08-01T12:00:00Z"
+            },
+            {
+              "title": "实现全部认证和业务接口",
+              "description": "依赖数据库设计，预计需要连续四天。",
+              "acceptance_criteria": "所有接口实现完成。",
+              "start_time": "2026-08-01T12:00:00Z",
+              "due_time": "2026-08-02T00:00:00Z"
+            },
+            {
+              "title": "编写完整测试并部署",
+              "description": "依赖接口实现，预计需要连续三天。",
+              "acceptance_criteria": "测试通过且生产环境可访问。",
+              "start_time": "2026-08-02T00:00:00Z",
+              "due_time": "2026-08-02T23:59:00Z"
+            }
+          ]
+        },
+        "tool_results": [
+          {
+            "call_id": "seed-project-list",
+            "tool_name": "list_user_projects",
+            "arguments": {},
+            "phase": "reviewing",
+            "status": "success",
+            "output": []
+          }
+        ]
+      },
+      "expected": {
+        "allowed_actions": ["replan"],
+        "required_findings": [
+          {
+            "categories": ["schedule", "feasibility"],
+            "minimum_severity": "warning"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "review_requests_duplicate_lookup",
+      "description": "Review should obtain project data before claiming a new draft is not a duplicate.",
+      "target": "review",
+      "input": {
+        "messages": [
+          {
+            "role": "user",
+            "content": "请规划 AI Agent 求职准备项目，并确认它没有和我已有项目重复。"
+          }
+        ],
+        "info": {
+          "goal": "完成 AI Agent 实习求职准备",
+          "acceptance_criteria": "完成项目、简历和面试准备",
+          "constraints": ["不能与已有项目重复"]
+        },
+        "draft": {
+          "project": {
+            "title": "AI Agent 求职准备"
+          },
+          "tasks": [
+            {
+              "title": "完善 Agent 项目",
+              "acceptance_criteria": "项目具有 README、测试和可运行演示。"
+            },
+            {
+              "title": "准备项目简历描述",
+              "acceptance_criteria": "形成有证据支持的三条项目描述。"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "allowed_actions": ["use_tool"],
+        "required_tool": "list_user_projects"
+      }
+    },
+    {
+      "case_id": "review_detects_duplicate_tasks",
+      "description": "Duplicate tasks inside one draft should be reported instead of confirmed.",
+      "target": "review",
+      "input": {
+        "messages": [
+          {
+            "role": "user",
+            "content": "帮我规划一个带测试的 FastAPI API。"
+          }
+        ],
+        "info": {
+          "goal": "完成带自动化测试的 FastAPI API",
+          "acceptance_criteria": "核心接口及测试可运行",
+          "constraints": []
+        },
+        "draft": {
+          "project": {
+            "title": "FastAPI API"
+          },
+          "tasks": [
+            {
+              "title": "实现用户认证接口",
+              "acceptance_criteria": "注册和登录接口测试通过。"
+            },
+            {
+              "title": "实现用户认证接口",
+              "acceptance_criteria": "注册和登录接口测试通过。"
+            },
+            {
+              "title": "实现业务接口与测试",
+              "acceptance_criteria": "核心业务接口测试通过。"
+            }
+          ]
+        },
+        "tool_results": [
+          {
+            "call_id": "seed-project-list",
+            "tool_name": "list_user_projects",
+            "arguments": {},
+            "phase": "reviewing",
+            "status": "success",
+            "output": []
+          }
+        ]
+      },
+      "expected": {
+        "allowed_actions": ["replan"],
+        "required_findings": [
+          {
+            "categories": ["duplication"],
+            "minimum_severity": "warning"
+          }
+        ]
+      }
+    }
+  ]
+}

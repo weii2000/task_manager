@@ -4,4 +4,5 @@ __pycache__/
 .vscode/
 .env
 .venv/
+eval-results/
 AGENTS.md
