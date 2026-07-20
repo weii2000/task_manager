@@ -1,0 +1,55 @@
+x-app-environment: &app-environment
+  PROJECT_NAME: "${PROJECT_NAME:-Task Manager}"
+  DATABASE_URL: "mysql+aiomysql://${MYSQL_USER:-task_manager}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE:-task_manager}?charset=utf8mb4"
+  SECRET_KEY: "${SECRET_KEY:?Set SECRET_KEY in .env}"
+  ACCESS_TOKEN_EXPIRE_MINUTES: "${ACCESS_TOKEN_EXPIRE_MINUTES:-60}"
+  REFRESH_TOKEN_EXPIRE_DAYS: "${REFRESH_TOKEN_EXPIRE_DAYS:-7}"
+  OPENAI_API_KEY: "${OPENAI_API_KEY:?Set OPENAI_API_KEY in .env}"
+  OPENAI_BASE_URL: "${OPENAI_BASE_URL:?Set OPENAI_BASE_URL in .env}"
+  OPENAI_MODEL: "${OPENAI_MODEL:?Set OPENAI_MODEL in .env}"
+
+services:
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-task_manager}
+      MYSQL_USER: ${MYSQL_USER:-task_manager}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+      MYSQL_RANDOM_ROOT_PASSWORD: "yes"
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u $${MYSQL_USER} --password=$${MYSQL_PASSWORD} --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  migrate:
+    image: task-manager
+    environment: *app-environment
+    depends_on:
+      db:
+        condition: service_healthy
+    command: [".venv/bin/alembic", "upgrade", "head"]
+
+  backend:
+    image: task-manager
+    build: .
+    environment: *app-environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "8000:8000"
+
+  frontend:
+    image: task-manager
+    command: [".venv/bin/python", "frontend/server.py", "--api-url", "http://backend:8000", "--host", "0.0.0.0"]
+    depends_on:
+      - backend
+    ports:
+      - "5173:5173"
+
+volumes:
+  mysql_data:

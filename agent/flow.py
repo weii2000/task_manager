@@ -91,7 +91,7 @@ class Flow:
         state: State,
         context: AgentRunContext,
     ) -> tuple[State, str]:
-        state = State.model_validate(state.model_dump())
+        state = State.model_validate(state.model_dump()) # 执行pydantic校验，确保状态合法
         next_action = state.next_action
         if next_action is None:
             raise AgentFlowEntryPointError()

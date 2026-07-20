@@ -131,7 +131,8 @@ task_manager/
 
 - Python 3.12 或更高版本
 - [uv](https://docs.astral.sh/uv/)
-- 可访问的 MySQL 数据库
+- 可访问的 MySQL 数据库（本地启动时）
+- Docker 与 Docker Compose（整套容器启动时）
 - 支持 OpenAI 兼容接口和 JSON 输出的模型服务
 
 ### 2. 安装依赖
@@ -154,21 +155,13 @@ CREATE DATABASE task_manager
 
 ### 4. 配置环境变量
 
-在项目根目录创建 `.env`：
+复制环境变量模板：
 
-```dotenv
-PROJECT_NAME=Task Manager
-DATABASE_URL=mysql+aiomysql://task_manager:password@127.0.0.1:3306/task_manager?charset=utf8mb4
-SECRET_KEY=replace-with-a-random-secret
-ACCESS_TOKEN_EXPIRE_MINUTES=60
-REFRESH_TOKEN_EXPIRE_DAYS=7
-
-OPENAI_API_KEY=replace-with-your-api-key
-OPENAI_BASE_URL=https://your-openai-compatible-endpoint/v1
-OPENAI_MODEL=your-model-name
+```bash
+test -f .env || cp .env.example .env
 ```
 
-请替换数据库账号、密码和模型配置，不要把真实密钥提交到 Git。可以使用以下命令生成随机密钥：
+编辑 `.env`，替换数据库密码、`SECRET_KEY` 和模型配置。如果已有 `.env`，请对照 `.env.example` 补充 `MYSQL_*` 变量。不要把真实密钥提交到 Git。密码可使用以下命令生成：
 
 ```bash
 openssl rand -hex 32
@@ -191,7 +184,23 @@ uv run fastapi dev main.py
 - OpenAPI 文档：<http://127.0.0.1:8000/docs>
 - ReDoc：<http://127.0.0.1:8000/redoc>
 
-### 7. 启动前端
+### 7. 使用 Docker 一键启动整套系统（可选）
+
+使用 Docker 时只需先完成第 4 步，无需在宿主机安装 Python、uv 或 MySQL，也无需手动执行迁移、启动后端和前端。
+
+```bash
+docker compose up --build
+```
+
+该命令会自动启动 MySQL、执行 Alembic 迁移、启动后端和前端。启动完成后访问 <http://127.0.0.1:5173>，API 文档位于 <http://127.0.0.1:8000/docs>。按 `Ctrl+C` 停止后可清理容器：
+
+```bash
+docker compose down
+```
+
+MySQL 数据保存在 Docker volume 中，`docker compose down` 不会删除数据。
+
+### 8. 启动前端
 
 在另一个终端中运行：
 

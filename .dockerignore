@@ -1,0 +1,9 @@
+.git
+.env*
+!.env.example
+.venv
+.vscode
+__pycache__/
+*.py[cod]
+.pytest_cache/
+eval-results/
