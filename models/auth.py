@@ -1,10 +1,13 @@
 from datetime import datetime
+from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Integer, String, ForeignKey
+from sqlalchemy import DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-
 from models.base import Base
+
+if TYPE_CHECKING:
+    from models.user import User
 
 
 class RefreshToken(Base):
@@ -17,4 +20,4 @@ class RefreshToken(Base):
 
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.user_id"), nullable=False)
 
-    user: Mapped["User"] = relationship("User", back_populates="refresh_tokens") # type: ignore
+    user: Mapped["User"] = relationship("User", back_populates="refresh_tokens")

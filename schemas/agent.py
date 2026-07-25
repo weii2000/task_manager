@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field
 
-from agent.state import HumanDecision, State
+from agent.runtime.state import HumanDecision, State
 
 
 class AgentSessionRead(BaseModel):

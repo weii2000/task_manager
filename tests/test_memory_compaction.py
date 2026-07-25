@@ -5,9 +5,12 @@ from unittest.mock import AsyncMock
 import pytest
 from pydantic import ValidationError
 
-from agent.memory import MemoryManager, MemorySummaryResult
+from agent.memory.compaction import (
+    ConversationCompactor,
+    ConversationSummaryResult,
+)
 from agent.prompt import PlanPromptBuilder
-from agent.state import Message, MessageRole, State
+from agent.runtime.state import Message, MessageRole, State
 from exceptions.agent import AgentProviderError
 
 
@@ -18,14 +21,14 @@ def make_messages(contents: list[str]) -> list[Message]:
     ]
 
 
-def make_manager(
+def make_compactor(
     provider: AsyncMock,
     *,
     compact_threshold_chars: int = 20,
     recent_context_budget_chars: int = 15,
     max_recent_messages: int = 2,
-) -> MemoryManager:
-    return MemoryManager(
+) -> ConversationCompactor:
+    return ConversationCompactor(
         provider=provider,
         compact_threshold_chars=compact_threshold_chars,
         recent_context_budget_chars=recent_context_budget_chars,
@@ -35,10 +38,10 @@ def make_manager(
 
 def test_memory_does_not_compact_below_threshold():
     provider = AsyncMock()
-    manager = make_manager(provider)
+    compactor = make_compactor(provider)
     state = State(messages=make_messages(["short message"]))
 
-    result = asyncio.run(manager.compact(state))
+    result = asyncio.run(compactor.compact(state))
 
     assert result is state
     provider.complete.assert_not_awaited()
@@ -47,9 +50,9 @@ def test_memory_does_not_compact_below_threshold():
 def test_memory_compacts_prefix_with_count_and_character_limits():
     provider = AsyncMock()
     provider.complete = AsyncMock(
-        return_value=MemorySummaryResult(summary="合并后的摘要")
+        return_value=ConversationSummaryResult(summary="合并后的摘要")
     )
-    manager = make_manager(
+    compactor = make_compactor(
         provider,
         compact_threshold_chars=30,
         recent_context_budget_chars=28,
@@ -62,7 +65,7 @@ def test_memory_compacts_prefix_with_count_and_character_limits():
     ]
     state = State(messages=make_messages(contents))
 
-    result = asyncio.run(manager.compact(state))
+    result = asyncio.run(compactor.compact(state))
 
     assert result.memory_summary == "合并后的摘要"
     assert result.summarized_message_count == 2
@@ -80,9 +83,9 @@ def test_memory_compacts_prefix_with_count_and_character_limits():
 def test_memory_character_budget_can_keep_fewer_recent_messages():
     provider = AsyncMock()
     provider.complete = AsyncMock(
-        return_value=MemorySummaryResult(summary="压缩摘要")
+        return_value=ConversationSummaryResult(summary="压缩摘要")
     )
-    manager = make_manager(
+    compactor = make_compactor(
         provider,
         compact_threshold_chars=30,
         recent_context_budget_chars=15,
@@ -91,7 +94,7 @@ def test_memory_character_budget_can_keep_fewer_recent_messages():
     contents = ["a" * 10, "b" * 10, "c" * 10, "d" * 10]
     state = State(messages=make_messages(contents))
 
-    result = asyncio.run(manager.compact(state))
+    result = asyncio.run(compactor.compact(state))
 
     assert result.summarized_message_count == 3
     request = provider.complete.await_args.args[0]
@@ -104,9 +107,11 @@ def test_memory_character_budget_can_keep_fewer_recent_messages():
 def test_memory_incrementally_merges_previous_summary():
     provider = AsyncMock()
     provider.complete = AsyncMock(
-        return_value=MemorySummaryResult(summary="更新后的完整摘要")
+        return_value=ConversationSummaryResult(
+            summary="更新后的完整摘要"
+        )
     )
-    manager = make_manager(
+    compactor = make_compactor(
         provider,
         compact_threshold_chars=15,
         recent_context_budget_chars=12,
@@ -125,7 +130,7 @@ def test_memory_incrementally_merges_previous_summary():
         summarized_message_count=2,
     )
 
-    result = asyncio.run(manager.compact(state))
+    result = asyncio.run(compactor.compact(state))
 
     assert result.memory_summary == "更新后的完整摘要"
     assert result.summarized_message_count == 4
@@ -141,7 +146,7 @@ def test_memory_incrementally_merges_previous_summary():
 def test_memory_failure_does_not_mutate_state():
     provider = AsyncMock()
     provider.complete = AsyncMock(side_effect=AgentProviderError())
-    manager = make_manager(provider)
+    compactor = make_compactor(provider)
     state = State(
         messages=make_messages(
             ["first-long-message", "second-long-message"]
@@ -150,7 +155,7 @@ def test_memory_failure_does_not_mutate_state():
     original_state_json = state.model_dump_json()
 
     with pytest.raises(AgentProviderError):
-        asyncio.run(manager.compact(state))
+        asyncio.run(compactor.compact(state))
 
     assert state.model_dump_json() == original_state_json
 
@@ -187,7 +192,7 @@ def test_prompt_uses_summary_and_only_unsummarized_messages():
 )
 def test_memory_rejects_invalid_configuration(kwargs: dict[str, int]):
     with pytest.raises(ValueError):
-        MemoryManager(AsyncMock(), **kwargs)
+        ConversationCompactor(AsyncMock(), **kwargs)
 
 
 def test_state_rejects_summary_without_summarized_messages():

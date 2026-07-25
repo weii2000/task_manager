@@ -6,8 +6,8 @@ from pathlib import Path
 from statistics import median
 
 from evals.models import (
-    EvalCaseStability,
     EvalCaseResult,
+    EvalCaseStability,
     EvalCheckResult,
     EvalMetricSummary,
     EvalRunResult,

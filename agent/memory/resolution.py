@@ -11,12 +11,11 @@ from pydantic import (
 )
 
 from agent.provider import LLMMessage, LLMProvider, LLMRequest
-from agent.state import MessageRole
+from agent.runtime.state import MessageRole
 from exceptions.memory import MemoryResolutionError
 from models.enums import MemoryCategory
 
-
-LONG_TERM_MEMORY_SYSTEM_PROMPT = """
+MEMORY_RESOLUTION_SYSTEM_PROMPT = """
 你负责从用户明确提供的自然语言中提取并维护长期记忆。
 
 输入 JSON 包含：
@@ -142,7 +141,7 @@ class LLMMemoryResolver:
             messages=[
                 LLMMessage(
                     role=MessageRole.SYSTEM,
-                    content=LONG_TERM_MEMORY_SYSTEM_PROMPT,
+                    content=MEMORY_RESOLUTION_SYSTEM_PROMPT,
                 ),
                 LLMMessage(
                     role=MessageRole.USER,

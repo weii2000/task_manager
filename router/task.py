@@ -21,7 +21,6 @@ from services.task import (
     update_task_status_for_user,
 )
 
-
 router = APIRouter(
     prefix="/api/tasks",
     tags=["tasks"],

@@ -2,11 +2,11 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from openai import OpenAIError
 import pytest
+from openai import OpenAIError
 
 from agent.provider import LLMMessage, LLMRequest, OpenAICompatibleLLMProvider
-from agent.state import Action, PlanDecision
+from agent.runtime.state import Action, PlanDecision
 from exceptions.agent import AgentProviderError, AgentResponseFormatError
 
 

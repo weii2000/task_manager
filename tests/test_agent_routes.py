@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from agent.state import AgentPhase, Message, MessageRole, State
+from agent.runtime.state import AgentPhase, Message, MessageRole, State
 from dependencies.agent import get_agent_flow, get_memory_extractor
 from exceptions.agent import (
     AgentSessionNotAwaitingConfirmationError,

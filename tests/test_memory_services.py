@@ -5,16 +5,16 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agent.long_term_memory import (
+from agent.memory.extraction import (
+    ExtractedMemoryCandidate,
+    MemoryExtractionResult,
+)
+from agent.memory.resolution import (
     MemoryResolutionResult,
     MemoryWriteAction,
     MemoryWriteOperation,
 )
-from agent.memory_extractor import (
-    ExtractedMemoryCandidate,
-    MemoryExtractionResult,
-)
-from agent.state import Message, MessageRole
+from agent.runtime.state import Message, MessageRole
 from exceptions.memory import (
     ArchivedMemoryModificationError,
     MemoryStateConflictError,

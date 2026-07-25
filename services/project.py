@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.datetime_utils import utc_now_naive
 from crud.project import (
     create_project_by_data,
     get_project_by_id_and_owner_user_id,
@@ -16,7 +17,6 @@ from exceptions.project import (
     ProjectNotFoundError,
     SystemProjectModificationError,
 )
-from core.datetime_utils import utc_now_naive
 from models.enums import CreationSource, ProjectStatus
 from schemas.project import (
     ProjectCreate,
@@ -24,7 +24,6 @@ from schemas.project import (
     ProjectStatusUpdate,
     ProjectUpdate,
 )
-
 
 ALLOWED_PROJECT_STATUS_TRANSITIONS = {
     ProjectStatus.PLANNING: {

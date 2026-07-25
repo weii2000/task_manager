@@ -5,7 +5,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agent.state import (
+from agent.runtime.context import RetrievedMemory
+from agent.runtime.state import (
     Action,
     AgentPhase,
     ExecutionResult,
@@ -17,7 +18,6 @@ from agent.state import (
     PlanningTask,
     State,
 )
-from agent.context import RetrievedMemory
 from exceptions.agent import (
     AgentSessionNotAcceptingTurnError,
     AgentSessionNotAwaitingConfirmationError,

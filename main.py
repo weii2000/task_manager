@@ -1,14 +1,18 @@
-from fastapi import FastAPI
 from contextlib import asynccontextmanager
 
+from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-
 from database.session import async_engine
-from router import agent, auth, memory, project, task, user
 from exceptions.base import AppError
-from exceptions.handlers import app_error_handler, http_exception_handler, validation_exception_handler, unexpected_exception_handler
+from exceptions.handlers import (
+    app_error_handler,
+    http_exception_handler,
+    unexpected_exception_handler,
+    validation_exception_handler,
+)
+from router import agent, auth, memory, project, task, user
 
 
 @asynccontextmanager

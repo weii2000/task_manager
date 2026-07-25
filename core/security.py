@@ -1,13 +1,12 @@
-from datetime import datetime, timedelta, timezone
 import hashlib
+from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 
 import jwt
 from jwt.exceptions import InvalidTokenError
 from passlib.context import CryptContext
-from uuid import uuid4
 
 from core.config import settings
-
 
 ALGORITHM = "HS256"
 

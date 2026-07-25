@@ -1,20 +1,21 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
 from typing import Generic, TypeVar
 
 from fastapi.encoders import jsonable_encoder
 from pydantic import ValidationError
 
-from agent.context import AgentRunContext
-from agent.executor import PlanExecutor
 from agent.prompt import AgentPromptBuilder
 from agent.provider import LLMProvider
-from agent.state import (
+from agent.runtime.context import AgentRunContext
+from agent.runtime.state import (
     Action,
     AgentPhase,
     AvailableTool,
     BaseDecision,
+    ExecutionResult,
     Message,
     MessageRole,
     PlanDecision,
@@ -32,8 +33,11 @@ from exceptions.agent import (
 )
 from exceptions.base import AppError
 
-
 DecisionT = TypeVar("DecisionT", bound=BaseDecision)
+type PlanPersistence = Callable[
+    [State, AgentRunContext],
+    Awaitable[ExecutionResult],
+]
 
 
 class Node:
@@ -207,9 +211,9 @@ class ConfirmNode(Node):
 
 
 class ExecuteNode(Node):
-    def __init__(self, executor: PlanExecutor) -> None:
+    def __init__(self, persist_plan: PlanPersistence) -> None:
         super().__init__()
-        self._executor = executor
+        self._persist_plan = persist_plan
 
     async def exec(self, state: State, context: AgentRunContext) -> State:
         if state.phase != AgentPhase.EXECUTING:
@@ -217,7 +221,7 @@ class ExecuteNode(Node):
         if state.human_decision is None or not state.human_decision.approved:
             raise AgentExecutionNotApprovedError()
 
-        execution = await self._executor.execute(state, context)
+        execution = await self._persist_plan(state, context)
         new_state = state.model_copy(deep=True)
         new_state.execution = execution
         new_state.phase = AgentPhase.COMPLETED

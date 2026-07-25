@@ -2,10 +2,10 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent.context import AgentRunContext
-from agent.flow import Flow
-from agent.memory_extractor import MemoryExtractor
-from agent.state import (
+from agent.memory.extraction import MemoryExtractor
+from agent.runtime.context import AgentRunContext
+from agent.runtime.flow import Flow
+from agent.runtime.state import (
     Action,
     AgentPhase,
     HumanDecision,
@@ -31,7 +31,6 @@ from services.memory import (
     extract_pending_memories_from_turn,
     get_active_memory_references_for_user,
 )
-
 
 logger = logging.getLogger(__name__)
 

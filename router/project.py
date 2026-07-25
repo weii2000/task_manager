@@ -17,10 +17,9 @@ from services.project import (
     get_project_for_user,
     get_projects_for_user,
     restore_project_for_user,
-    update_project_status_for_user,
     update_project_for_user,
+    update_project_status_for_user,
 )
-
 
 router = APIRouter(
     prefix="/api/projects",

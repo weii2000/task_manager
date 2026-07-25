@@ -1,3 +1,5 @@
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from core.datetime_utils import utc_now_naive
 from crud.project import (
     get_inbox_project_by_owner_user_id,
@@ -32,8 +34,6 @@ from schemas.task import (
     TaskStatusUpdate,
     TaskUpdate,
 )
-from sqlalchemy.ext.asyncio import AsyncSession
-
 
 ALLOWED_TASK_STATUS_TRANSITIONS = {
     TaskStatus.TODO: {

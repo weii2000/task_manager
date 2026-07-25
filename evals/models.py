@@ -5,8 +5,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from agent.context import RetrievedMemory
-from agent.state import (
+from agent.runtime.context import RetrievedMemory
+from agent.runtime.state import (
     Action,
     AgentPhase,
     AvailableTool,

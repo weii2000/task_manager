@@ -7,7 +7,6 @@ from crud.user import get_user_by_user_id
 from database.session import get_auth_db
 from models.user import User
 
-
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 

@@ -1,12 +1,15 @@
 from datetime import datetime
+from typing import TYPE_CHECKING
 
-from sqlalchemy import CheckConstraint, DateTime, Integer, String, ForeignKey, Text
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-
 from models.base import Base
 from models.enums import CreationSource, TaskPriority, TaskStatus
+
+if TYPE_CHECKING:
+    from models.project import Project
 
 
 class Task(Base):
@@ -96,7 +99,7 @@ class Task(Base):
         DateTime(timezone=False),
         nullable=True,
     )
-    project: Mapped["Project"] = relationship( # type: ignore
+    project: Mapped["Project"] = relationship(
         "Project",
         back_populates="tasks",
     )

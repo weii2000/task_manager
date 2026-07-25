@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 from pydantic import ValidationError
 
-from agent.long_term_memory import (
+from agent.memory.resolution import (
     ExistingMemory,
     LLMMemoryResolver,
     MemoryResolutionResult,

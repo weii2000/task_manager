@@ -8,7 +8,6 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-
 FRONTEND_DIR = Path(__file__).resolve().parent
 DEFAULT_API_TIMEOUT_SECONDS = 15
 LLM_API_TIMEOUT_SECONDS = 300

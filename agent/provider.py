@@ -4,9 +4,8 @@ from typing import Protocol, TypeVar
 from openai import AsyncOpenAI, OpenAIError
 from pydantic import BaseModel, Field, ValidationError
 
-from agent.state import MessageRole
+from agent.runtime.state import MessageRole
 from exceptions.agent import AgentProviderError, AgentResponseFormatError
-
 
 ResponseT = TypeVar("ResponseT", bound=BaseModel)
 logger = logging.getLogger(__name__)

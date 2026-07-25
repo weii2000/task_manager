@@ -3,10 +3,9 @@ import json
 from pydantic import BaseModel, Field
 
 from agent.provider import LLMMessage, LLMProvider, LLMRequest
-from agent.state import MessageRole, State
+from agent.runtime.state import MessageRole, State
 
-
-MEMORY_SYSTEM_PROMPT = """
+CONVERSATION_SUMMARY_SYSTEM_PROMPT = """
 你负责维护 Agent 的长期对话摘要。
 
 输入 JSON 包含：
@@ -29,11 +28,11 @@ MEMORY_SYSTEM_PROMPT = """
 """.strip()
 
 
-class MemorySummaryResult(BaseModel):
+class ConversationSummaryResult(BaseModel):
     summary: str = Field(min_length=1, max_length=5000)
 
 
-class MemoryManager:
+class ConversationCompactor:
     def __init__(
         self,
         provider: LLMProvider,
@@ -69,9 +68,7 @@ class MemoryManager:
         start = state.summarized_message_count
         unsummarized = state.messages[start:]
 
-        total_chars = sum(
-            len(message.content) for message in unsummarized
-        )
+        total_chars = sum(len(message.content) for message in unsummarized)
         if total_chars <= self._compact_threshold_chars:
             return state
 
@@ -93,7 +90,7 @@ class MemoryManager:
             messages=[
                 LLMMessage(
                     role=MessageRole.SYSTEM,
-                    content=MEMORY_SYSTEM_PROMPT,
+                    content=CONVERSATION_SUMMARY_SYSTEM_PROMPT,
                 ),
                 LLMMessage(
                     role=MessageRole.USER,
@@ -107,7 +104,7 @@ class MemoryManager:
 
         result = await self._provider.complete(
             request,
-            MemorySummaryResult,
+            ConversationSummaryResult,
         )
 
         new_state = state.model_copy(deep=True)
@@ -121,10 +118,11 @@ class MemoryManager:
         start: int,
     ) -> int:
         kept_chars = 0
-        kept_count = 0
         compact_until = len(state.messages)
 
-        for index in range(len(state.messages) - 1, start - 1, -1):
+        for kept_count, index in enumerate(
+            range(len(state.messages) - 1, start - 1, -1)
+        ):
             message_chars = len(state.messages[index].content)
             exceeds_count = kept_count >= self._max_recent_messages
             exceeds_budget = (
@@ -135,7 +133,6 @@ class MemoryManager:
             if exceeds_count or exceeds_budget:
                 return index + 1
 
-            kept_count += 1
             kept_chars += message_chars
             compact_until = index
 

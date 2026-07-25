@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from pydantic import ValidationError
 
-from agent.state import (
+from agent.runtime.state import (
     Action,
     AgentPhase,
     ExecutionResult,

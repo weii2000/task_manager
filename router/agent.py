@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent.flow import Flow
-from agent.memory_extractor import MemoryExtractor
-from agent.state import State
+from agent.memory.extraction import MemoryExtractor
+from agent.runtime.flow import Flow
+from agent.runtime.state import State
 from database.session import get_db
 from dependencies.agent import get_agent_flow, get_memory_extractor
 from dependencies.auth import get_current_user
@@ -22,7 +22,6 @@ from services.agent import (
     get_agent_session_by_session_id_for_user,
     resume_agent_session_by_session_id_for_user,
 )
-
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
 

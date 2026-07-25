@@ -1,9 +1,12 @@
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-
 from crud.user import update_user_info_by_dict
-from exceptions.user import EmailAlreadyExistsError, EmptyUserUpdateError, UserNotFoundError
+from exceptions.user import (
+    EmailAlreadyExistsError,
+    EmptyUserUpdateError,
+    UserNotFoundError,
+)
 from schemas.user import UserInfoUpdate, UserRead
 
 

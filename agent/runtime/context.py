@@ -1,3 +1,5 @@
+"""Agent 运行上下文。"""
+
 from dataclasses import dataclass
 
 from pydantic import BaseModel, ConfigDict, Field

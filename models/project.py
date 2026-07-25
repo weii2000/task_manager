@@ -1,12 +1,24 @@
 from datetime import datetime
+from typing import TYPE_CHECKING
 
-from sqlalchemy import CheckConstraint, DateTime, Integer, String, ForeignKey, Text, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-
 from models.base import Base
 from models.enums import CreationSource, ProjectStatus, ProjectSystemType
+
+if TYPE_CHECKING:
+    from models.task import Task
+    from models.user import User
 
 
 class Project(Base):
@@ -94,11 +106,11 @@ class Project(Base):
         DateTime(timezone=False),
         nullable=True,
     )
-    owner: Mapped["User"] = relationship( # type: ignore
+    owner: Mapped["User"] = relationship(
         "User",
         back_populates="projects",
     )
-    tasks: Mapped[list["Task"]] = relationship( # type: ignore
+    tasks: Mapped[list["Task"]] = relationship(
         "Task",
         back_populates="project",
         cascade="all, delete-orphan",

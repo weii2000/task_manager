@@ -1,12 +1,11 @@
-from fastapi import APIRouter, Depends, Cookie, Response
+from fastapi import APIRouter, Cookie, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.cookies import delete_refresh_cookie, set_refresh_cookie
-from schemas.auth import AuthResponse, LoginRequest, RegisterRequest
-from services.auth import login, logout, refresh, register
 from database.session import get_db
+from schemas.auth import AuthResponse, LoginRequest, RegisterRequest
 from schemas.response import ApiResponse
-
+from services.auth import login, logout, refresh, register
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 

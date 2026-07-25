@@ -1,13 +1,12 @@
 import asyncio
 from datetime import datetime, timezone
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agent.context import AgentRunContext
-from agent.flow import Flow
-from agent.state import (
+from agent.runtime.context import AgentRunContext
+from agent.runtime.flow import Flow
+from agent.runtime.state import (
     Action,
     AgentPhase,
     AvailableTool,
@@ -96,7 +95,7 @@ def make_review_decision(
 def test_flow_stops_after_clarify():
     provider = AsyncMock()
     provider.complete = AsyncMock(return_value=make_plan_decision())
-    flow = Flow(provider=provider)
+    flow = Flow(provider=provider, persist_plan=AsyncMock())
 
     result_state, response = asyncio.run(
         flow.run(make_state(), make_context())
@@ -120,7 +119,7 @@ def test_plan_review_confirm_flow_pauses_for_human():
             ),
         ]
     )
-    flow = Flow(provider=provider)
+    flow = Flow(provider=provider, persist_plan=AsyncMock())
 
     result_state, response = asyncio.run(
         flow.run(make_state(), make_context())
@@ -157,7 +156,7 @@ def test_review_can_use_tool_and_return_to_review():
             make_review_decision(Action.CONFIRM),
         ]
     )
-    flow = Flow(provider=provider)
+    flow = Flow(provider=provider, persist_plan=AsyncMock())
 
     try:
         result_state, _ = asyncio.run(
@@ -188,7 +187,7 @@ def test_blocking_review_returns_to_plan_before_confirming():
             make_review_decision(Action.CONFIRM),
         ]
     )
-    flow = Flow(provider=provider)
+    flow = Flow(provider=provider, persist_plan=AsyncMock())
 
     result_state, _ = asyncio.run(
         flow.run(make_state(), make_context())
@@ -210,7 +209,11 @@ def test_flow_raises_when_step_limit_exceeded():
             ),
         ]
     )
-    flow = Flow(provider=provider, max_steps=2)
+    flow = Flow(
+        provider=provider,
+        persist_plan=AsyncMock(),
+        max_steps=2,
+    )
 
     with pytest.raises(AgentFlowStepLimitExceededError):
         asyncio.run(flow.run(make_state(), make_context()))
@@ -223,10 +226,10 @@ def test_flow_executes_approved_plan_from_execute_entrypoint():
         created_task_count=1,
         completed_at=datetime.now(timezone.utc),
     )
-    executor = SimpleNamespace(execute=AsyncMock(return_value=execution))
+    persist_plan = AsyncMock(return_value=execution)
     provider = AsyncMock()
     provider.complete = AsyncMock()
-    flow = Flow(provider=provider, executor=executor)
+    flow = Flow(provider=provider, persist_plan=persist_plan)
     state = State(
         messages=[Message(role=MessageRole.USER, content="帮我规划学习")],
         phase=AgentPhase.EXECUTING,
@@ -242,7 +245,7 @@ def test_flow_executes_approved_plan_from_execute_entrypoint():
         flow.run(state, make_context())
     )
 
-    executor.execute.assert_awaited_once()
+    persist_plan.assert_awaited_once()
     provider.complete.assert_not_awaited()
     assert result_state.phase == AgentPhase.COMPLETED
     assert result_state.next_action is None
@@ -253,8 +256,8 @@ def test_flow_executes_approved_plan_from_execute_entrypoint():
 def test_flow_rejects_state_without_next_action():
     provider = AsyncMock()
     provider.complete = AsyncMock()
-    executor = SimpleNamespace(execute=AsyncMock())
-    flow = Flow(provider=provider, executor=executor)
+    persist_plan = AsyncMock()
+    flow = Flow(provider=provider, persist_plan=persist_plan)
     state = State(
         messages=[Message(role=MessageRole.USER, content="帮我规划学习")],
         phase=AgentPhase.CONFIRMING,
@@ -265,4 +268,4 @@ def test_flow_rejects_state_without_next_action():
         asyncio.run(flow.run(state, make_context()))
 
     provider.complete.assert_not_awaited()
-    executor.execute.assert_not_awaited()
+    persist_plan.assert_not_awaited()

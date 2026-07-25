@@ -32,8 +32,7 @@ uv run python -m evals.runner --repetitions 3
 
 - `structured_output`：模型输出是否通过生产 Pydantic Schema 和 Node 校验。
 - `action_correctness`：下一步动作是否属于案例允许的动作集合。
-- `constraint_retention`：通过“频率、上限、时长”等概念组判断明确约束是否
-  保留，不依赖固定完整句子。
+- `constraint_retention`：通过“频率、上限、时长”等概念组判断明确约束是否保留，不依赖固定完整句子。
 - `acceptance_criteria_coverage`：具有验收标准的任务比例。
 - `tool_selection`：需要读取事实时是否选择了指定工具。
 - `review_finding_*`：Review 是否发现预设类别且达到最低严重度。

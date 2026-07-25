@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent.long_term_memory import MemoryResolver
+from agent.memory.resolution import MemoryResolver
 from database.session import get_db
 from dependencies.agent import get_memory_resolver
 from dependencies.auth import get_current_user
@@ -23,7 +23,6 @@ from services.memory import (
     ingest_memories_for_user,
     update_memory_for_user,
 )
-
 
 router = APIRouter(prefix="/api/memories", tags=["memories"])
 

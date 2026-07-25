@@ -1,5 +1,5 @@
-from collections.abc import Mapping
 import logging
+from collections.abc import Mapping
 
 from fastapi import Request
 from fastapi.encoders import jsonable_encoder
@@ -9,7 +9,6 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from exceptions.base import AppError
 from schemas.response import ApiResponse
-
 
 logger = logging.getLogger(__name__)
 

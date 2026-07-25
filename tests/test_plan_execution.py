@@ -5,9 +5,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from agent.context import AgentRunContext
-from agent.executor import DatabasePlanExecutor
-from agent.state import (
+from agent.runtime.context import AgentRunContext
+from agent.runtime.state import (
     Message,
     MessageRole,
     PlanningDraft,
@@ -18,6 +17,7 @@ from agent.state import (
 )
 from exceptions.agent import AgentExecutionContextError
 from models.enums import CreationSource, ProjectStatus, TaskPriority, TaskStatus
+from services.plan_execution import persist_plan
 
 
 def make_state() -> State:
@@ -53,7 +53,7 @@ def make_state() -> State:
     )
 
 
-def test_database_executor_creates_project_and_task_tree(monkeypatch):
+def test_persist_plan_creates_project_and_task_tree(monkeypatch):
     project = SimpleNamespace(project_id=42, title="Agent 工程学习")
     tasks = [
         SimpleNamespace(task_id=101),
@@ -62,13 +62,19 @@ def test_database_executor_creates_project_and_task_tree(monkeypatch):
     ]
     create_project = AsyncMock(return_value=project)
     create_task = AsyncMock(side_effect=tasks)
-    monkeypatch.setattr("agent.executor.create_project_by_data", create_project)
-    monkeypatch.setattr("agent.executor.create_task_by_data", create_task)
+    monkeypatch.setattr(
+        "services.plan_execution.create_project_by_data",
+        create_project,
+    )
+    monkeypatch.setattr(
+        "services.plan_execution.create_task_by_data",
+        create_task,
+    )
     db = AsyncMock()
     context = AgentRunContext(user_id=7, db=db, session_id=9)
 
     result = asyncio.run(
-        DatabasePlanExecutor().execute(make_state(), context)
+        persist_plan(make_state(), context)
     )
 
     project_data = create_project.await_args.args[0]
@@ -98,17 +104,17 @@ def test_database_executor_creates_project_and_task_tree(monkeypatch):
     assert result.created_task_count == 3
 
 
-def test_database_executor_requires_session_context():
+def test_persist_plan_requires_session_context():
     context = AgentRunContext(user_id=7, db=AsyncMock())
 
     with pytest.raises(AgentExecutionContextError):
-        asyncio.run(DatabasePlanExecutor().execute(make_state(), context))
+        asyncio.run(persist_plan(make_state(), context))
 
 
-def test_database_executor_rejects_empty_task_plan():
+def test_persist_plan_rejects_empty_task_plan():
     state = make_state()
     state.draft.tasks = []
     context = AgentRunContext(user_id=7, db=AsyncMock(), session_id=9)
 
     with pytest.raises(AgentExecutionContextError):
-        asyncio.run(DatabasePlanExecutor().execute(state, context))
+        asyncio.run(persist_plan(state, context))

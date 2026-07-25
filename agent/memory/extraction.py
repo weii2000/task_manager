@@ -9,11 +9,10 @@ from pydantic import (
 )
 
 from agent.provider import LLMMessage, LLMProvider, LLMRequest
-from agent.state import Message, MessageRole
+from agent.runtime.state import Message, MessageRole
 from models.enums import MemoryCategory
 
-
-MEMORY_EXTRACTION_SYSTEM_PROMPT = """
+LONG_TERM_MEMORY_EXTRACTION_SYSTEM_PROMPT = """
 你负责从近期对话中识别值得跨任务、跨会话保存的用户长期记忆候选。
 
 输入 JSON 的 messages 按时间顺序排列。Assistant 消息只用于理解用户消息的指代和上下文，不能作为用户事实来源。
@@ -103,7 +102,7 @@ class LLMMemoryExtractor:
             messages=[
                 LLMMessage(
                     role=MessageRole.SYSTEM,
-                    content=MEMORY_EXTRACTION_SYSTEM_PROMPT,
+                    content=LONG_TERM_MEMORY_EXTRACTION_SYSTEM_PROMPT,
                 ),
                 LLMMessage(
                     role=MessageRole.USER,

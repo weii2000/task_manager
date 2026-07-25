@@ -1,16 +1,15 @@
 import json
 from typing import Protocol
 
-from agent.context import RetrievedMemory
 from agent.provider import LLMMessage, LLMRequest
-from agent.state import (
+from agent.runtime.context import RetrievedMemory
+from agent.runtime.state import (
     AgentPhase,
     AvailableTool,
     MessageRole,
     State,
 )
 from agent.tools.registry import get_tool_specs
-
 
 PLAN_SYSTEM_PROMPT = """
 你是 Task Manager 项目中的任务规划 Agent。

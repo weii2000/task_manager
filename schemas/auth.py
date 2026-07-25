@@ -1,7 +1,8 @@
 import re
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-from schemas.user import UserRead
 
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from schemas.user import UserRead
 
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
 

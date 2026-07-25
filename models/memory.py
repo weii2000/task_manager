@@ -1,15 +1,22 @@
+from typing import TYPE_CHECKING
+
 from sqlalchemy import (
     CheckConstraint,
-    Enum as SAEnum,
     ForeignKey,
     Index,
     Integer,
     Text,
 )
+from sqlalchemy import (
+    Enum as SAEnum,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.base import Base
 from models.enums import MemoryCategory, MemorySource, MemoryStatus
+
+if TYPE_CHECKING:
+    from models.user import User
 
 
 class UserMemory(Base):
@@ -78,7 +85,7 @@ class UserMemory(Base):
         nullable=False,
     )
 
-    user: Mapped["User"] = relationship(  # type: ignore
+    user: Mapped["User"] = relationship(
         "User",
         back_populates="memories",
     )

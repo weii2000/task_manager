@@ -1,14 +1,14 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent.context import RetrievedMemory
-from agent.long_term_memory import (
+from agent.memory.extraction import MemoryExtractor
+from agent.memory.resolution import (
     ExistingMemory,
     MemoryResolutionResult,
     MemoryResolver,
     MemoryWriteAction,
 )
-from agent.memory_extractor import MemoryExtractor
-from agent.state import Message
+from agent.runtime.context import RetrievedMemory
+from agent.runtime.state import Message
 from crud.memory import (
     create_memory_by_data,
     get_memories_by_user_id_and_status,
@@ -34,7 +34,6 @@ from schemas.memory import (
     MemoryRead,
     MemoryUpdateRequest,
 )
-
 
 AGENT_MEMORY_LIMIT = 30
 

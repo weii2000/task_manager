@@ -2,12 +2,12 @@ import asyncio
 import json
 from unittest.mock import AsyncMock
 
-from agent.memory_extractor import (
+from agent.memory.extraction import (
     ExtractedMemoryCandidate,
     LLMMemoryExtractor,
     MemoryExtractionResult,
 )
-from agent.state import Message, MessageRole
+from agent.runtime.state import Message, MessageRole
 from models.enums import MemoryCategory
 
 

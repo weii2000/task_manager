@@ -1,11 +1,11 @@
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Generic, TypeVar
+from typing import Any
 
 from pydantic import BaseModel
 
-from agent.context import AgentRunContext
-from agent.state import AvailableTool
+from agent.runtime.context import AgentRunContext
+from agent.runtime.state import AvailableTool
 from agent.tools.project import (
     get_project_task_tree,
     list_user_projects,
@@ -16,18 +16,14 @@ from agent.tools.schemas import (
 )
 
 
-InputT = TypeVar("InputT", bound=BaseModel)
-OutputT = TypeVar("OutputT")
-
-
 @dataclass(frozen=True)
-class ToolDefinition(Generic[InputT, OutputT]):
+class ToolDefinition:
     description: str
-    input_schema: type[InputT]
-    handler: Callable[[AgentRunContext, InputT], Awaitable[OutputT]]
+    input_schema: type[BaseModel]
+    handler: Callable[[AgentRunContext, Any], Awaitable[Any]]
 
 
-TOOL_REGISTRY: dict[AvailableTool, ToolDefinition[Any, Any]] = {
+TOOL_REGISTRY: dict[AvailableTool, ToolDefinition] = {
     AvailableTool.LIST_USER_PROJECTS: ToolDefinition(
         description="查询当前用户已有项目，可按标题、描述或目标进行模糊搜索。",
         input_schema=ListUserProjectsInput,
@@ -41,7 +37,7 @@ TOOL_REGISTRY: dict[AvailableTool, ToolDefinition[Any, Any]] = {
 }
 
 
-def get_tool_definition(tool_name: AvailableTool) -> ToolDefinition[Any, Any]:
+def get_tool_definition(tool_name: AvailableTool) -> ToolDefinition:
     return TOOL_REGISTRY[tool_name]
 
 

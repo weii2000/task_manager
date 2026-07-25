@@ -1,11 +1,12 @@
-import pytest
 from datetime import datetime
 from types import SimpleNamespace
+
+import pytest
 from fastapi.testclient import TestClient
 
-from main import app
 from database.session import get_db
 from dependencies.auth import get_current_user
+from main import app
 from models.enums import (
     CreationSource,
     ProjectStatus,

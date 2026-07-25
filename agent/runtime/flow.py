@@ -1,27 +1,26 @@
-from agent.context import AgentRunContext
-from agent.executor import DatabasePlanExecutor, PlanExecutor
-from agent.memory import MemoryManager
-from agent.node import (
-    ClarifyNode,
-    ConfirmNode,
-    ExecuteNode,
-    Node,
-    PlanNode,
-    ReviewNode,
-    ToolNode,
-)
+from agent.memory.compaction import ConversationCompactor
 from agent.prompt import (
     AgentPromptBuilder,
     PlanPromptBuilder,
     ReviewPromptBuilder,
 )
 from agent.provider import LLMProvider
-from agent.state import Action, AgentPhase, AvailableTool, State
+from agent.runtime.context import AgentRunContext
+from agent.runtime.node import (
+    ClarifyNode,
+    ConfirmNode,
+    ExecuteNode,
+    Node,
+    PlanNode,
+    PlanPersistence,
+    ReviewNode,
+    ToolNode,
+)
+from agent.runtime.state import Action, AgentPhase, AvailableTool, State
 from exceptions.agent import (
     AgentFlowEntryPointError,
     AgentFlowStepLimitExceededError,
 )
-
 
 PLAN_ALLOWED_TOOLS = frozenset(AvailableTool)
 REVIEW_ALLOWED_TOOLS = frozenset(AvailableTool)
@@ -31,15 +30,15 @@ class Flow:
     def __init__(
         self,
         provider: LLMProvider,
+        persist_plan: PlanPersistence,
         max_steps: int = 20,
         plan_prompt_builder: AgentPromptBuilder | None = None,
         review_prompt_builder: AgentPromptBuilder | None = None,
-        executor: PlanExecutor | None = None,
-        memory_manager: MemoryManager | None = None,
+        conversation_compactor: ConversationCompactor | None = None,
     ) -> None:
         self.max_steps = max_steps
-        self.memory_manager = (
-            memory_manager or MemoryManager(provider)
+        self.conversation_compactor = (
+            conversation_compactor or ConversationCompactor(provider)
         )
         self.plan_node = PlanNode(
             provider=provider,
@@ -59,9 +58,7 @@ class Flow:
         )
         self.clarify_node = ClarifyNode()
         self.confirm_node = ConfirmNode()
-        self.execute_node = ExecuteNode(
-            executor if executor is not None else DatabasePlanExecutor()
-        )
+        self.execute_node = ExecuteNode(persist_plan)
         self.plan_tool_node = ToolNode(
             return_action=Action.PLAN,
             phase=AgentPhase.PLANNING,
@@ -97,7 +94,7 @@ class Flow:
             raise AgentFlowEntryPointError()
 
         if next_action == Action.PLAN:
-            state = await self.memory_manager.compact(state)
+            state = await self.conversation_compactor.compact(state)
             state = State.model_validate(state.model_dump())
 
         cur = self.entry_nodes.get(next_action)

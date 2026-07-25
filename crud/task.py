@@ -1,7 +1,6 @@
 from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-
 from models.enums import TaskStatus
 from models.project import Project
 from models.task import Task

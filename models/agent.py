@@ -1,8 +1,13 @@
+from typing import TYPE_CHECKING
+
 from sqlalchemy import ForeignKey, Integer, Text
 from sqlalchemy.dialects import mysql
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.base import Base
+
+if TYPE_CHECKING:
+    from models.user import User
 
 
 class AgentSession(Base):
@@ -20,7 +25,7 @@ class AgentSession(Base):
         nullable=False,
     )
 
-    user: Mapped["User"] = relationship(  # type: ignore
+    user: Mapped["User"] = relationship(
         "User",
         back_populates="sessions",
     )

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unicodedata
 
-from agent.state import (
+from agent.runtime.state import (
     BaseDecision,
     PlanDecision,
     PlanningProject,
@@ -11,7 +11,6 @@ from agent.state import (
     ReviewSeverity,
 )
 from evals.models import EvalCase, EvalCheckResult
-
 
 SEVERITY_RANK = {
     ReviewSeverity.INFO: 0,
