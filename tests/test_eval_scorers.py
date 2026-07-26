@@ -19,10 +19,10 @@ from agent.runtime.state import (
 )
 from evals.models import EvalCaseResult, EvalCheckResult, EvalTarget
 from evals.report import build_run_result
-from evals.runner import load_suite, run_case
+from evals.node_runner import load_suite, run_case
 from evals.scorers import score_decision
 
-SUITE_PATH = Path(__file__).parents[1] / "evals" / "cases.json"
+SUITE_PATH = Path(__file__).parents[1] / "evals" / "node_cases.json"
 
 
 def get_case(case_id: str):
@@ -33,7 +33,13 @@ def get_case(case_id: str):
 def test_core_eval_suite_contains_unique_plan_and_review_cases():
     suite = load_suite(SUITE_PATH)
 
-    assert suite.version == "1.4"
+    assert suite.version == "1.6"
+    assert suite.current_time_utc == datetime(
+        2026,
+        7,
+        13,
+        tzinfo=timezone.utc,
+    )
     assert len(suite.cases) == 13
     assert len({case.case_id for case in suite.cases}) == 13
     assert sum(
@@ -159,6 +165,44 @@ def test_maximum_task_count_is_an_observable_soft_metric():
 
     assert maximum_check.passed is False
     assert maximum_check.hard is False
+
+
+def test_acceptance_coverage_only_counts_leaf_tasks():
+    case = get_case("plan_complete_goal_builds_draft")
+    decision = PlanDecision(
+        content="计划已准备好。",
+        next_action=Action.REVIEW,
+        info=PlanningInfo(
+            goal="完成 FastAPI 任务管理 API",
+            acceptance_criteria="核心接口和测试可运行",
+            constraints=["每天最多投入 1 小时"],
+        ),
+        draft=PlanningDraft(
+            project=PlanningProject(title="FastAPI 任务管理 API"),
+            tasks=[
+                PlanningTask(
+                    title="分组任务",
+                    subtasks=[
+                        PlanningTask(
+                            title=f"叶子任务 {index}",
+                            acceptance_criteria=f"验收标准 {index}",
+                        )
+                        for index in range(2)
+                    ],
+                )
+            ],
+        ),
+    )
+
+    checks = score_decision(case, decision)
+    coverage = next(
+        check
+        for check in checks
+        if check.name == "acceptance_criteria_coverage"
+    )
+
+    assert coverage.passed is True
+    assert coverage.detail == "actual=1.000; minimum=0.600"
 
 
 def test_review_scorer_accepts_alternative_finding_category():
@@ -318,6 +362,10 @@ def test_report_distinguishes_soft_metrics_and_adds_latency_percentiles():
     stability = run_result.summary.case_stability[case.case_id]
     assert stability.passed_executions == 4
     assert stability.total_executions == 4
+    serialized = run_result.model_dump_json()
+    assert serialized.index('"summary"') < serialized.index('"results"')
+    assert run_result.model_dump(mode="json")["started_at"].endswith("Z")
+    assert run_result.current_time_utc == suite.current_time_utc
     assert stability.pass_rate == 1.0
 
 
@@ -329,6 +377,7 @@ def test_memory_eval_separates_application_from_feasibility_conflict():
 
     assert application_case.expected.allowed_actions == [Action.REVIEW]
     assert conflict_case.expected.allowed_actions == [Action.CLARIFY]
+    assert conflict_case.expected.min_question_count is None
     assert application_case.expected.required_constraints == (
         conflict_case.expected.required_constraints
     )

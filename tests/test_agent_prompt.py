@@ -1,6 +1,12 @@
 import json
+from datetime import datetime, timezone
 
-from agent.prompt import PlanPromptBuilder, ReviewPromptBuilder
+from agent.prompt import (
+    PLAN_SYSTEM_PROMPT,
+    REVIEW_SYSTEM_PROMPT,
+    PlanPromptBuilder,
+    ReviewPromptBuilder,
+)
 from agent.runtime.context import RetrievedMemory
 from agent.runtime.flow import PLAN_ALLOWED_TOOLS, REVIEW_ALLOWED_TOOLS
 from agent.runtime.state import (
@@ -50,7 +56,11 @@ def test_plan_prompt_uses_history_and_planning_context():
         ],
     )
 
-    request = PlanPromptBuilder(PLAN_ALLOWED_TOOLS).build(state)
+    fixed_time = datetime(2026, 7, 13, tzinfo=timezone.utc)
+    request = PlanPromptBuilder(
+        PLAN_ALLOWED_TOOLS,
+        current_time_utc=fixed_time,
+    ).build(state)
 
     assert [message.role for message in request.messages] == [
         MessageRole.SYSTEM,
@@ -63,6 +73,7 @@ def test_plan_prompt_uses_history_and_planning_context():
     assert "messages" not in context
     assert "next_action" not in context
     assert "pending_tool_calls" not in context
+    assert context["current_time_utc"] == "2026-07-13T00:00:00Z"
     assert context["previous_review"]["summary"] == (
         "上一版缺少验收标准"
     )
@@ -70,9 +81,10 @@ def test_plan_prompt_uses_history_and_planning_context():
     assert context["available_tools"][1]["input_schema"]["required"] == [
         "project_id"
     ]
+    assert request.messages[2].content == "继续规划项目 42"
 
 
-def test_review_prompt_only_includes_review_tool_results():
+def test_review_prompt_includes_recent_tool_results_across_phases():
     state = State(
         messages=[Message(role=MessageRole.USER, content="帮我规划学习")],
         tool_results=[
@@ -99,6 +111,15 @@ def test_review_prompt_only_includes_review_tool_results():
     context = get_context(request)
 
     assert context["recent_tool_results"] == [
+        {
+            "call_id": "plan-call",
+            "tool_name": "list_user_projects",
+            "arguments": {},
+            "phase": "planning",
+            "status": "success",
+            "output": [],
+            "error": None,
+        },
         {
             "call_id": "review-call",
             "tool_name": "list_user_projects",
@@ -135,3 +156,20 @@ def test_prompt_includes_ephemeral_long_term_memory_context():
         }
     ]
     assert "long_term_memories" not in state.model_dump()
+
+
+def test_prompts_define_time_tool_and_review_action_contracts():
+    assert "不得依赖模型记忆猜测当前日期" in PLAN_SYSTEM_PROMPT
+    assert "必须优先选择 \"clarify\"" in PLAN_SYSTEM_PROMPT
+    assert "相同工具和相同参数的成功结果时必须直接复用" in (
+        PLAN_SYSTEM_PROMPT
+    )
+    assert "start_time 或 due_time 为 null 本身不是缺陷" in (
+        REVIEW_SYSTEM_PROMPT
+    )
+    assert "没有 blocking finding 时选择 \"confirm\"" in (
+        REVIEW_SYSTEM_PROMPT
+    )
+    assert "叶子任务缺少具体、可验证的 acceptance_criteria" in (
+        REVIEW_SYSTEM_PROMPT
+    )

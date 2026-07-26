@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from statistics import median
+from typing import Protocol
 
 from evals.models import (
     EvalCaseResult,
@@ -16,12 +18,16 @@ from evals.models import (
 )
 
 
-def build_run_result(
-    suite: EvalSuite,
-    model: str,
-    started_at: datetime,
-    results: list[EvalCaseResult],
-) -> EvalRunResult:
+class SummaryResult(Protocol):
+    case_id: str
+    passed: bool
+    latency_ms: float
+    checks: list[EvalCheckResult]
+
+
+def build_run_summary(
+    results: Sequence[SummaryResult],
+) -> EvalRunSummary:
     total_executions = len(results)
     passed_executions = sum(result.passed for result in results)
     metric_checks: dict[str, list[EvalCheckResult]] = defaultdict(list)
@@ -45,21 +51,10 @@ def build_run_result(
         )
 
     latencies = [result.latency_ms for result in results]
-    results_by_case: dict[str, list[EvalCaseResult]] = defaultdict(list)
+    results_by_case: dict[str, list[SummaryResult]] = defaultdict(list)
     for result in results:
         results_by_case[result.case_id].append(result)
-    case_stability = {
-        case_id: EvalCaseStability(
-            passed_executions=sum(result.passed for result in case_results),
-            total_executions=len(case_results),
-            pass_rate=(
-                sum(result.passed for result in case_results)
-                / len(case_results)
-            ),
-        )
-        for case_id, case_results in sorted(results_by_case.items())
-    }
-    summary = EvalRunSummary(
+    return EvalRunSummary(
         passed_executions=passed_executions,
         total_executions=total_executions,
         unique_cases=len(results_by_case),
@@ -75,17 +70,38 @@ def build_run_result(
         ),
         p50_latency_ms=median(latencies) if latencies else 0.0,
         p95_latency_ms=_percentile(latencies, 0.95),
-        case_stability=case_stability,
+        case_stability={
+            case_id: EvalCaseStability(
+                passed_executions=sum(
+                    result.passed for result in case_results
+                ),
+                total_executions=len(case_results),
+                pass_rate=(
+                    sum(result.passed for result in case_results)
+                    / len(case_results)
+                ),
+            )
+            for case_id, case_results in sorted(results_by_case.items())
+        },
         metrics=metrics,
     )
+
+
+def build_run_result(
+    suite: EvalSuite,
+    model: str,
+    started_at: datetime,
+    results: list[EvalCaseResult],
+) -> EvalRunResult:
     return EvalRunResult(
         suite_name=suite.name,
         suite_version=suite.version,
         model=model,
+        current_time_utc=suite.current_time_utc,
         started_at=started_at,
         completed_at=datetime.now(timezone.utc),
+        summary=build_run_summary(results),
         results=results,
-        summary=summary,
     )
 
 

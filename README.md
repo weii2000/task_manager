@@ -2,7 +2,9 @@
 
 一个由 Agent 驱动的任务规划与管理系统。
 
-用户可以用自然语言描述一个明确或模糊的目标，系统会经过需求澄清、结构化规划、工具查询、计划评审和人工确认，最终把通过审核的计划保存为项目与任务树。项目当前已经形成一个可运行、可测试的小闭环，而不是只生成一段静态待办文本。
+用户可以用自然语言描述一个明确或模糊的目标，系统会经过需求澄清、结构化规划、工具查询、计划评审和人工确认，最终把通过审核的计划保存为项目与任务树。计划保存后，用户可以继续维护任务状态并跟踪完成进度。
+
+项目聚焦于“从自然语言目标到可追踪计划”的规划闭环，而不是只生成一段静态待办文本。
 
 ## 当前能力
 
@@ -13,29 +15,34 @@
 - 在计划完成后自动进入独立的 Review 阶段，检查完整性、可行性、时间安排、重复和冲突。
 - 在计划真正写入数据库前设置人工确认边界（Human-in-the-loop）。
 - 用户确认后，在同一事务中创建项目和递归任务树。
+- 通过项目和任务接口维护状态、优先级、层级关系与归档状态。
 - 支持对话上下文压缩，以及经过人工确认的长期记忆。
 - 支持 Agent 会话持久化与恢复，降低长请求断开后前后端状态不一致的影响。
 - 提供确定性测试和基于真实模型的 Agent Eval。
-
-> 当前的 Execute 指“将确认后的计划持久化为项目和任务”，还不包含调用外部系统自主完成任务。
 
 ## Agent 工作流
 
 ```mermaid
 flowchart LR
-    A[用户目标] --> B[Plan 规划]
-    B -->|信息不足| C[Clarify 澄清]
-    C --> B
-    B -->|需要已有数据| D[只读工具]
-    D --> B
-    B -->|形成草稿| E[Review 评审]
-    E -->|需要已有数据| F[只读工具]
-    F --> E
-    E -->|发现问题| B
-    E -->|评审通过| G[Confirm 人工确认]
-    G -->|拒绝并反馈| B
-    G -->|批准| H[Execute 持久化]
-    H --> I[项目与任务树]
+    U["用户目标"]:::human --> P["Plan<br/>理解目标 · 生成草稿"]:::agent
+    P -->|信息不足或需要取舍| C["Clarify<br/>单点澄清"]:::human
+    C -->|用户补充| P
+    P -->|需要已有数据| PT["Read-only Tool<br/>查询项目与任务"]:::tool
+    PT --> P
+    P -->|草稿就绪| R["Review<br/>独立评审"]:::agent
+    R -->|核对重复与冲突| RT["Read-only Tool<br/>查询项目与任务"]:::tool
+    RT --> R
+    R -->|发现阻塞问题| P
+    R -->|可以确认| H["Human Confirm<br/>人工审批"]:::human
+    H -->|拒绝并反馈| P
+    H -->|批准| W["Apply Plan<br/>单事务写入"]:::service
+    W --> DB[("Project + Task Tree")]:::data
+
+    classDef human fill:#FFF7ED,stroke:#EA580C,color:#7C2D12,stroke-width:1.5px
+    classDef agent fill:#EEF2FF,stroke:#4F46E5,color:#312E81,stroke-width:1.5px
+    classDef tool fill:#ECFEFF,stroke:#0891B2,color:#164E63,stroke-width:1.5px
+    classDef service fill:#ECFDF5,stroke:#059669,color:#064E3B,stroke-width:1.5px
+    classDef data fill:#F8FAFC,stroke:#475569,color:#0F172A,stroke-width:1.5px
 ```
 
 工作流由确定性状态机控制，LLM 只负责需要语义判断的节点。节点输出必须通过 Pydantic Schema 校验，工具调用、状态转换和人工审批边界由代码约束。
@@ -59,9 +66,9 @@ Agent 当前可以调用以下只读工具：
 
 工具数据按当前用户隔离，用于识别已有计划、重复任务和潜在冲突。写操作不会由规划或评审节点直接执行。
 
-### 4. 人工确认与事务一致性
+### 4. 人工确认与原子落库
 
-计划必须经过人工确认才能执行。批准后，项目和全部任务在同一个数据库事务中创建；任意一步失败都会回滚，避免只创建项目或只写入部分任务。重复批准已完成会话时会返回已有结果，避免重复落库。
+计划必须经过人工确认才能写入业务表。批准后，项目和全部任务在同一个数据库事务中创建；任意一步失败都会回滚，避免只创建项目或只写入部分任务。重复批准已完成会话时会返回已有结果，避免重复落库。
 
 ### 5. 两层记忆
 
@@ -76,18 +83,58 @@ Agent 会话状态持久化在数据库中。前端保存会话标识，并可�
 
 ## 技术架构
 
-后端按照传输层、业务层和持久化层拆分：
+后端按照传输层、应用层、Agent Runtime 和持久化层拆分：
 
-```text
-浏览器
-  │
-  ├── 原生 HTML / CSS / JavaScript
-  │
-  └── FastAPI Router
-        ├── Service：业务规则与事务边界
-        ├── Agent Flow：状态机、节点、工具与记忆
-        ├── CRUD：数据库访问
-        └── SQLAlchemy Async → MySQL
+```mermaid
+flowchart TB
+    UI["Web UI<br/>HTML · CSS · JavaScript"]:::client
+
+    subgraph TRANSPORT["Transport Layer"]
+        ROUTER["FastAPI Router<br/>HTTP · Auth · Validation"]:::transport
+        CONTRACT["Pydantic Schemas<br/>API Contract"]:::contract
+    end
+
+    subgraph APPLICATION["Application Layer"]
+        AGENT_SERVICE["Agent Service<br/>会话与事务编排"]:::service
+        DOMAIN_SERVICE["Project · Task · Memory Services<br/>业务规则"]:::service
+        PLAN_WRITE["Plan Persistence<br/>原子写入项目与任务树"]:::service
+    end
+
+    subgraph AGENT["Agent Runtime"]
+        RUNTIME["Flow · Nodes · State<br/>确定性状态机"]:::agent
+        TOOLS["Read-only Tools<br/>项目与任务查询"]:::tool
+    end
+
+    LLM["LLM Provider<br/>结构化语义决策"]:::external
+
+    subgraph PERSISTENCE["Persistence Layer"]
+        CRUD["CRUD"]:::data
+        ORM["SQLAlchemy Async"]:::data
+        DB[("MySQL")]:::database
+    end
+
+    UI --> ROUTER
+    ROUTER -.-> CONTRACT
+    ROUTER --> AGENT_SERVICE
+    ROUTER --> DOMAIN_SERVICE
+    AGENT_SERVICE --> RUNTIME
+    RUNTIME --> LLM
+    RUNTIME --> TOOLS
+    TOOLS --> DOMAIN_SERVICE
+    RUNTIME --> PLAN_WRITE
+    DOMAIN_SERVICE --> CRUD
+    PLAN_WRITE --> CRUD
+    CRUD --> ORM --> DB
+
+    classDef client fill:#FFF7ED,stroke:#EA580C,color:#7C2D12,stroke-width:1.5px
+    classDef transport fill:#EFF6FF,stroke:#2563EB,color:#1E3A8A,stroke-width:1.5px
+    classDef contract fill:#F8FAFC,stroke:#64748B,color:#334155,stroke-dasharray:4 3
+    classDef service fill:#ECFDF5,stroke:#059669,color:#064E3B,stroke-width:1.5px
+    classDef agent fill:#EEF2FF,stroke:#4F46E5,color:#312E81,stroke-width:1.5px
+    classDef tool fill:#ECFEFF,stroke:#0891B2,color:#164E63,stroke-width:1.5px
+    classDef external fill:#FAF5FF,stroke:#9333EA,color:#581C87,stroke-width:1.5px
+    classDef data fill:#F8FAFC,stroke:#475569,color:#0F172A,stroke-width:1.5px
+    classDef database fill:#F1F5F9,stroke:#334155,color:#0F172A,stroke-width:2px
 ```
 
 主要技术栈：
@@ -107,7 +154,7 @@ Agent 会话状态持久化在数据库中。前端保存会话标识，并可�
 
 ```text
 task_manager/
-├── agent/          # Flow、节点、状态、Provider、工具、执行器与记忆
+├── agent/          # Prompt、Provider、Runtime Flow、工具与记忆
 ├── alembic/        # 数据库迁移
 ├── core/           # 配置、安全与日志
 ├── crud/           # 数据访问层
@@ -119,7 +166,7 @@ task_manager/
 ├── models/         # SQLAlchemy 模型
 ├── router/         # HTTP 路由
 ├── schemas/        # API 与业务数据模型
-├── services/       # 业务逻辑与事务编排
+├── services/       # 业务逻辑、事务编排与计划落库
 ├── tests/          # 确定性测试
 ├── main.py         # FastAPI 应用入口
 └── pyproject.toml  # 项目依赖与 Python 配置
@@ -241,29 +288,38 @@ uv run python frontend/server.py \
 uv run pytest
 ```
 
-当前版本的本地基线为 **122 项测试通过**。这些测试覆盖核心 Service、Agent 节点与状态转换、路由契约、记忆处理、执行事务和会话恢复等路径，不会调用真实 LLM。
+当前版本的本地基线为 **132 项测试通过**。这些测试覆盖核心 Service、Agent 节点与状态转换、路由契约、记忆处理、计划落库事务、会话恢复和 Workflow Eval 运行器等路径，不会调用真实 LLM。
 
 ### Agent Eval
 
 Eval 会调用 `.env` 中配置的真实模型，可能产生 API 费用：
 
 ```bash
-uv run python -m evals.runner
+# 单节点行为：Plan / Review
+uv run python -m evals.node_runner
+
+# 完整工作流：Clarify / Tool / Replan / Confirm
+uv run python -m evals.workflow_runner
 ```
 
-也可以只运行指定用例并重复执行，用于观察模型行为稳定性：
+两个入口彼此独立，可以只跑当前修改涉及的一层。也可以指定用例并重复执行，
+用于观察模型行为稳定性：
 
 ```bash
-uv run python -m evals.runner \
+uv run python -m evals.node_runner \
   --case plan_complete_goal_builds_draft \
+  --repetitions 3
+
+uv run python -m evals.workflow_runner \
+  --case blocking_review_replans_then_confirms \
   --repetitions 3
 ```
 
-当前版本的一次完整本地基线结果：
+当前保留的一次完整 Node 本地基线结果：
 
 | 指标 | 结果 |
 | --- | ---: |
-| Eval Suite | `core-agent v1.4` |
+| Eval Suite | `core-agent-nodes v1.4` |
 | 模型 | `deepseek-v4-flash` |
 | 用例通过率 | 13 / 13（100%） |
 | 结构化输出 | 13 / 13（100%） |
@@ -271,7 +327,7 @@ uv run python -m evals.runner \
 | 平均延迟 | 10,602 ms |
 | P50 / P95 延迟 | 8,655 ms / 23,575 ms |
 
-该结果是 2026-07-13 在单一模型上的一次本地基线，不代表任意模型或任意输入都能达到相同效果。当前 Eval 采用代码评分器而不是 LLM-as-a-Judge，便于得到可复现、可解释的回归信号；数据集仍较小，后续需要继续补充真实失败样本、多模型对比和重复运行。
+该结果是 2026-07-13 在单一模型上的 Node Eval 基线，不代表任意模型或任意输入都能达到相同效果。当前 Eval 采用代码评分器而不是 LLM-as-a-Judge，便于得到可复现、可解释的回归信号；Workflow Eval 暂未记录真实模型基线，数据集也仍较小，后续需要继续补充真实失败样本、多模型对比和重复运行。
 
 评估设计和用例格式详见 [evals/README.md](evals/README.md)。
 
@@ -281,25 +337,23 @@ uv run python -m evals.runner \
 - **先使用只读工具**：规划阶段不直接修改业务数据，降低模型误操作风险。
 - **人工确认后再写入**：把不可逆或高影响操作放在明确的审批边界之后。
 - **记忆需要治理**：对话提取的长期记忆先由用户确认，避免错误信息静默污染未来上下文。
-- **先完成单 Agent 小闭环**：当前没有引入多 Agent 编排，优先保证流程可验证、错误可定位。
+- **先完成单 Agent 规划闭环**：当前没有引入多 Agent 编排，优先保证流程可验证、错误可定位。
 - **Eval 与单元测试分离**：pytest 检查确定性代码，Eval 检查模型在代表性场景中的行为。
 
 ## 当前限制
 
-- Execute 目前只负责创建项目和任务，还没有任务实际执行、执行反馈和动态重规划闭环。
 - 已建立会话可以在长请求失败后恢复；如果首次创建会话的请求在前端收到会话标识之前断开，前端仍无法自动定位该会话。
-- Eval 数据集目前只有 13 个核心用例，尚未覆盖更长对话、更多异常工具返回、Prompt Injection 和跨模型稳定性。
+- Eval 数据集目前包含 13 个 Node 用例和 3 个 Workflow 用例，尚未覆盖更长对话、更多异常工具返回、Prompt Injection 和跨模型稳定性。
 - 当前只有基础日志和错误记录，尚未提供完整的 Trace、Token 成本统计和生产级可观测性。
-- 仓库暂未包含容器化部署、持续集成和生产环境配置。
+- 已支持本地 Docker Compose，但尚未接入持续集成、远程部署和生产环境配置。
 
 ## 后续计划
 
-1. 增加任务执行反馈，并根据结果更新或重新规划后续任务。
-2. 为工具增加超时、重试、幂等键和更细粒度的错误恢复策略。
-3. 扩充 Eval 数据集，加入真实失败样本、多轮场景、重复运行和多模型对比。
-4. 增加完整 Trace、模型延迟、Token 用量和单次任务成本统计。
-5. 补充 Docker、持续集成、部署说明与生产环境安全配置。
-6. 增加 Agent 安全测试，包括越权工具调用和 Prompt Injection 防护。
+1. 扩充 Eval 数据集，加入真实失败样本、多轮场景、重复运行和多模型对比。
+2. 增加完整 Trace、模型延迟、Token 用量和单次规划成本统计。
+3. 为工具增加超时、重试和更细粒度的错误恢复策略。
+4. 补充持续集成、远程部署说明与生产环境安全配置。
+5. 增加 Agent 安全测试，包括越权工具调用和 Prompt Injection 防护。
 
 ## 版权声明
 

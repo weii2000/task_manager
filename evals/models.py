@@ -3,7 +3,13 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from agent.runtime.context import RetrievedMemory
 from agent.runtime.state import (
@@ -19,6 +25,7 @@ from agent.runtime.state import (
     State,
     ToolResult,
 )
+from core.datetime_utils import to_utc_aware
 
 
 class EvalTarget(StrEnum):
@@ -176,7 +183,13 @@ class EvalSuite(BaseModel):
 
     name: str = Field(min_length=1, max_length=100)
     version: str = Field(pattern=r"^\d+\.\d+(?:\.\d+)?$")
+    current_time_utc: datetime
     cases: list[EvalCase] = Field(min_length=1)
+
+    @field_validator("current_time_utc")
+    @classmethod
+    def normalize_current_time(cls, value: datetime) -> datetime:
+        return to_utc_aware(value)
 
     @model_validator(mode="after")
     def validate_unique_case_ids(self) -> EvalSuite:
@@ -245,7 +258,8 @@ class EvalRunResult(BaseModel):
     suite_name: str
     suite_version: str
     model: str
+    current_time_utc: datetime
     started_at: datetime
     completed_at: datetime
-    results: list[EvalCaseResult]
     summary: EvalRunSummary
+    results: list[EvalCaseResult]

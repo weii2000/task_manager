@@ -27,8 +27,8 @@ from evals.models import (
 from evals.report import build_run_result, print_run_result, write_run_result
 from evals.scorers import score_decision
 
-DEFAULT_SUITE_PATH = Path(__file__).with_name("cases.json")
-DEFAULT_OUTPUT_DIR = Path("eval-results")
+DEFAULT_SUITE_PATH = Path(__file__).with_name("node_cases.json")
+DEFAULT_OUTPUT_DIR = Path("eval-results/node")
 
 
 class CapturingProvider:
@@ -55,6 +55,7 @@ async def run_case(
     case: EvalCase,
     provider: LLMProvider,
     repetition: int = 1,
+    current_time_utc: datetime | None = None,
 ) -> EvalCaseResult:
     state = case.build_state()
     capturing_provider = CapturingProvider(provider)
@@ -68,13 +69,19 @@ async def run_case(
         if case.target == EvalTarget.PLAN:
             node = PlanNode(
                 provider=capturing_provider,
-                prompt_builder=PlanPromptBuilder(PLAN_ALLOWED_TOOLS),
+                prompt_builder=PlanPromptBuilder(
+                    PLAN_ALLOWED_TOOLS,
+                    current_time_utc=current_time_utc,
+                ),
                 allowed_tools=PLAN_ALLOWED_TOOLS,
             )
         else:
             node = ReviewNode(
                 provider=capturing_provider,
-                prompt_builder=ReviewPromptBuilder(REVIEW_ALLOWED_TOOLS),
+                prompt_builder=ReviewPromptBuilder(
+                    REVIEW_ALLOWED_TOOLS,
+                    current_time_utc=current_time_utc,
+                ),
                 allowed_tools=REVIEW_ALLOWED_TOOLS,
             )
 
@@ -120,7 +127,14 @@ async def run_suite(
     results: list[EvalCaseResult] = []
     for repetition in range(1, repetitions + 1):
         for case in suite.cases:
-            results.append(await run_case(case, provider, repetition))
+            results.append(
+                await run_case(
+                    case,
+                    provider,
+                    repetition,
+                    suite.current_time_utc,
+                )
+            )
     return results
 
 

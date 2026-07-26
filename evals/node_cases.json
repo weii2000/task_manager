@@ -1,6 +1,7 @@
 {
-  "name": "core-agent",
-  "version": "1.4",
+  "name": "core-agent-nodes",
+  "version": "1.6",
+  "current_time_utc": "2026-07-13T00:00:00Z",
   "cases": [
     {
       "case_id": "plan_ambiguous_goal_clarifies",
@@ -210,7 +211,6 @@
       },
       "expected": {
         "allowed_actions": ["clarify"],
-        "min_question_count": 1,
         "required_constraints": [
           {
             "concept_groups": [

@@ -1,0 +1,118 @@
+{
+  "name": "core-agent-workflows",
+  "version": "1.4",
+  "current_time_utc": "2026-07-26T20:00:00Z",
+  "cases": [
+    {
+      "case_id": "clarify_then_plan_and_confirm",
+      "description": "模糊目标先澄清，用户补充信息后生成计划并通过评审。",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我想学 Python，帮我做个计划。"
+        }
+      ],
+      "follow_up_messages": [
+        "我已经熟悉 Python 基础语法。目标是在四周内做出一个可运行的 FastAPI 任务管理 API；每天投入一小时；完成标准是核心 CRUD 接口可运行并有自动化测试。"
+      ],
+      "tool_outputs": {
+        "list_user_projects": []
+      },
+      "expected": {
+        "decision_path": [
+          "clarify",
+          "review",
+          "use_tool",
+          "confirm"
+        ],
+        "required_actions": [
+          "clarify"
+        ],
+        "tool_call_counts": {
+          "list_user_projects": 1
+        },
+        "min_task_count": 3,
+        "min_acceptance_criteria_coverage": 0.6,
+        "max_model_calls": 4
+      }
+    },
+    {
+      "case_id": "lookup_then_plan_and_confirm",
+      "description": "规划前查询已有项目，工具返回后继续生成计划并通过评审。",
+      "messages": [
+        {
+          "role": "user",
+          "content": "建立一个 AI Agent 求职准备项目。先检查是否已有重复项目；若没有，直接制定完整计划。完成标准是整理好简历、项目讲解和面试题复习材料。"
+        }
+      ],
+      "tool_outputs": {
+        "list_user_projects": []
+      },
+      "expected": {
+        "decision_path": [
+          "use_tool",
+          "review",
+          "confirm"
+        ],
+        "required_actions": [
+          "use_tool"
+        ],
+        "tool_call_counts": {
+          "list_user_projects": 1
+        },
+        "min_task_count": 3,
+        "min_acceptance_criteria_coverage": 0.6,
+        "forbid_invented_dates": true,
+        "max_model_calls": 3
+      }
+    },
+    {
+      "case_id": "blocking_review_replans_then_confirms",
+      "description": "首版计划缺少验收标准，Review 阻塞后回到 Plan 修复并再次评审。",
+      "messages": [
+        {
+          "role": "user",
+          "content": "完成一个 FastAPI 任务管理 API，核心 CRUD 可运行且自动化测试通过。"
+        }
+      ],
+      "tool_outputs": {
+        "list_user_projects": []
+      },
+      "first_plan_decision": {
+        "content": "首版计划进入评审。",
+        "next_action": "review",
+        "tool_calls": [],
+        "info": {
+          "goal": "完成 FastAPI 任务管理 API",
+          "acceptance_criteria": "核心 CRUD 可运行且自动化测试通过"
+        },
+        "draft": {
+          "project": {
+            "title": "FastAPI 任务管理 API"
+          },
+          "tasks": [
+            {
+              "title": "实现核心 CRUD"
+            },
+            {
+              "title": "编写自动化测试"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "required_actions": [
+          "replan"
+        ],
+        "tool_call_counts": {
+          "list_user_projects": 1
+        },
+        "min_revision_count": 1,
+        "min_task_count": 2,
+        "min_acceptance_criteria_coverage": 1.0,
+        "forbid_invented_dates": true,
+        "max_model_calls": 4
+      }
+    }
+  ]
+}

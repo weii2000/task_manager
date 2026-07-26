@@ -194,10 +194,14 @@ def _score_plan(
         )
 
     if expected.min_acceptance_criteria_coverage is not None:
+        leaf_tasks = [task for task in tasks if not task.subtasks]
         covered_count = sum(
-            bool((task.acceptance_criteria or "").strip()) for task in tasks
+            bool((task.acceptance_criteria or "").strip())
+            for task in leaf_tasks
         )
-        coverage = covered_count / len(tasks) if tasks else 0.0
+        coverage = (
+            covered_count / len(leaf_tasks) if leaf_tasks else 0.0
+        )
         checks.append(
             EvalCheckResult(
                 name="acceptance_criteria_coverage",
