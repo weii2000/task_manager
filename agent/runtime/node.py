@@ -231,7 +231,7 @@ class ExecuteNode(Node):
             Message(
                 role=MessageRole.ASSISTANT,
                 content=(
-                    f"项目“{execution.project_title}”已创建，"
+                    f"计划“{execution.plan_title}”已创建，"
                     f"共写入 {execution.created_task_count} 个任务。"
                 ),
             )

@@ -5,7 +5,7 @@ import unicodedata
 from agent.runtime.state import (
     BaseDecision,
     PlanDecision,
-    PlanningProject,
+    PlanningPlan,
     PlanningTask,
     ReviewDecision,
     ReviewSeverity,
@@ -129,41 +129,41 @@ def _score_plan(
 ) -> list[EvalCheckResult]:
     checks: list[EvalCheckResult] = []
     expected = case.expected
-    project = decision.draft.project
+    plan = decision.draft.plan
     tasks = _flatten_tasks(decision.draft.tasks)
 
-    if expected.require_project is not None:
+    if expected.require_plan is not None:
         checks.append(
             EvalCheckResult(
-                name="project_presence",
-                passed=(project is not None) == expected.require_project,
-                detail=f"present={project is not None}",
+                name="plan_presence",
+                passed=(plan is not None) == expected.require_plan,
+                detail=f"present={plan is not None}",
             )
         )
 
-    if expected.require_project_start_time:
+    if expected.require_plan_start_time:
         checks.append(
             EvalCheckResult(
-                name="project_start_time",
-                passed=project is not None
-                and project.start_time is not None,
+                name="plan_start_time",
+                passed=plan is not None
+                and plan.start_time is not None,
                 detail=(
                     "missing"
-                    if project is None or project.start_time is None
-                    else project.start_time.isoformat()
+                    if plan is None or plan.start_time is None
+                    else plan.start_time.isoformat()
                 ),
             )
         )
 
-    if expected.require_project_due_time:
+    if expected.require_plan_due_time:
         checks.append(
             EvalCheckResult(
-                name="project_due_time",
-                passed=project is not None and project.due_time is not None,
+                name="plan_due_time",
+                passed=plan is not None and plan.due_time is not None,
                 detail=(
                     "missing"
-                    if project is None or project.due_time is None
-                    else project.due_time.isoformat()
+                    if plan is None or plan.due_time is None
+                    else plan.due_time.isoformat()
                 ),
             )
         )
@@ -244,8 +244,8 @@ def _score_plan(
             )
         )
 
-    if expected.tasks_within_project_window:
-        checks.append(_score_project_window(project, tasks))
+    if expected.tasks_within_plan_window:
+        checks.append(_score_plan_window(plan, tasks))
 
     return checks
 
@@ -283,34 +283,34 @@ def _score_review(
     return checks
 
 
-def _score_project_window(
-    project: PlanningProject | None,
+def _score_plan_window(
+    plan: PlanningPlan | None,
     tasks: list[PlanningTask],
 ) -> EvalCheckResult:
-    if project is None:
+    if plan is None:
         return EvalCheckResult(
-            name="project_window",
+            name="plan_window",
             passed=False,
-            detail="project is missing",
+            detail="plan is missing",
         )
 
     violations: list[str] = []
     for task in tasks:
         if (
-            project.start_time is not None
+            plan.start_time is not None
             and task.start_time is not None
-            and task.start_time < project.start_time
+            and task.start_time < plan.start_time
         ):
-            violations.append(f"{task.title}: starts before project")
+            violations.append(f"{task.title}: starts before plan")
         if (
-            project.due_time is not None
+            plan.due_time is not None
             and task.due_time is not None
-            and task.due_time > project.due_time
+            and task.due_time > plan.due_time
         ):
-            violations.append(f"{task.title}: ends after project")
+            violations.append(f"{task.title}: ends after plan")
 
     return EvalCheckResult(
-        name="project_window",
+        name="plan_window",
         passed=not violations,
         detail=f"violations={violations}",
     )

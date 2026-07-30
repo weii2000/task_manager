@@ -16,7 +16,7 @@
         "我已经熟悉 Python 基础语法。目标是在四周内做出一个可运行的 FastAPI 任务管理 API；每天投入一小时；完成标准是核心 CRUD 接口可运行并有自动化测试。"
       ],
       "tool_outputs": {
-        "list_user_projects": []
+        "list_user_plans": []
       },
       "expected": {
         "decision_path": [
@@ -29,7 +29,7 @@
           "clarify"
         ],
         "tool_call_counts": {
-          "list_user_projects": 1
+          "list_user_plans": 1
         },
         "min_task_count": 3,
         "min_acceptance_criteria_coverage": 0.6,
@@ -46,7 +46,7 @@
         }
       ],
       "tool_outputs": {
-        "list_user_projects": []
+        "list_user_plans": []
       },
       "expected": {
         "decision_path": [
@@ -58,7 +58,7 @@
           "use_tool"
         ],
         "tool_call_counts": {
-          "list_user_projects": 1
+          "list_user_plans": 1
         },
         "min_task_count": 3,
         "min_acceptance_criteria_coverage": 0.6,
@@ -76,7 +76,7 @@
         }
       ],
       "tool_outputs": {
-        "list_user_projects": []
+        "list_user_plans": []
       },
       "first_plan_decision": {
         "content": "首版计划进入评审。",
@@ -87,7 +87,7 @@
           "acceptance_criteria": "核心 CRUD 可运行且自动化测试通过"
         },
         "draft": {
-          "project": {
+          "plan": {
             "title": "FastAPI 任务管理 API"
           },
           "tasks": [
@@ -105,7 +105,7 @@
           "replan"
         ],
         "tool_call_counts": {
-          "list_user_projects": 1
+          "list_user_plans": 1
         },
         "min_revision_count": 1,
         "min_task_count": 2,

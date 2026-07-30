@@ -11,19 +11,19 @@ class EmptyTaskUpdateError(AppError):
     default_message = "没有需要更新的任务信息"
 
 
-class ParentTaskProjectMismatchError(AppError):
+class ParentTaskPlanMismatchError(AppError):
     status_code = 409
-    default_message = "父任务与目标项目不一致"
+    default_message = "父任务与目标计划不一致"
 
 
-class ProjectUnavailableForTaskError(AppError):
+class PlanUnavailableForTaskError(AppError):
     status_code = 409
-    default_message = "当前项目不允许进行任务操作"
+    default_message = "当前计划不允许进行任务操作"
 
 
-class InboxProjectNotFoundError(AppError):
+class InboxPlanNotFoundError(AppError):
     status_code = 500
-    default_message = "用户默认项目不存在"
+    default_message = "用户默认计划不存在"
 
 
 class ArchivedTaskModificationError(AppError):
@@ -54,3 +54,8 @@ class TaskHasUnarchivedChildrenError(AppError):
 class ParentTaskUnavailableError(AppError):
     status_code = 409
     default_message = "父任务当前不允许添加或恢复子任务"
+
+
+class TaskLevelLimitExceededError(AppError):
+    status_code = 409
+    default_message = "任务层级不能超过三级"

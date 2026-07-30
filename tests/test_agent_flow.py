@@ -17,7 +17,7 @@ from agent.runtime.state import (
     PlanDecision,
     PlanningDraft,
     PlanningInfo,
-    PlanningProject,
+    PlanningPlan,
     PlanningTask,
     ReviewCategory,
     ReviewDecision,
@@ -53,7 +53,7 @@ def make_plan_decision(
     draft = PlanningDraft()
     if action == Action.REVIEW:
         draft = PlanningDraft(
-            project=PlanningProject(title="学习计划"),
+            plan=PlanningPlan(title="学习计划"),
             tasks=[PlanningTask(title="完成第一阶段学习")],
         )
     return PlanDecision(
@@ -134,7 +134,7 @@ def test_plan_review_confirm_flow_pauses_for_human():
 
 
 def test_review_can_use_tool_and_return_to_review():
-    definition = TOOL_REGISTRY[AvailableTool.LIST_USER_PROJECTS]
+    definition = TOOL_REGISTRY[AvailableTool.LIST_USER_PLANS]
     original_handler = definition.handler
     handler = AsyncMock(return_value=[])
     object.__setattr__(definition, "handler", handler)
@@ -148,7 +148,7 @@ def test_review_can_use_tool_and_return_to_review():
                 tool_calls=[
                     ToolCall(
                         call_id="review-call",
-                        tool_name=AvailableTool.LIST_USER_PROJECTS,
+                        tool_name=AvailableTool.LIST_USER_PLANS,
                         parameter={},
                     )
                 ],
@@ -221,8 +221,8 @@ def test_flow_raises_when_step_limit_exceeded():
 
 def test_flow_executes_approved_plan_from_execute_entrypoint():
     execution = ExecutionResult(
-        project_id=42,
-        project_title="学习计划",
+        plan_id=42,
+        plan_title="学习计划",
         created_task_count=1,
         completed_at=datetime.now(timezone.utc),
     )
@@ -236,7 +236,7 @@ def test_flow_executes_approved_plan_from_execute_entrypoint():
         human_decision=HumanDecision(approved=True),
         next_action=Action.EXECUTE,
         draft=PlanningDraft(
-            project=PlanningProject(title="学习计划"),
+            plan=PlanningPlan(title="学习计划"),
             tasks=[PlanningTask(title="完成第一阶段学习")],
         ),
     )

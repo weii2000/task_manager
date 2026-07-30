@@ -342,21 +342,21 @@ def score_workflow(
             )
         )
     if expected.forbid_invented_dates:
-        project = state.draft.project
+        plan = state.draft.plan
         dated_tasks = [
             task.title
             for task in _flatten_tasks(state)
             if task.start_time is not None or task.due_time is not None
         ]
-        project_has_dates = project is not None and (
-            project.start_time is not None or project.due_time is not None
+        plan_has_dates = plan is not None and (
+            plan.start_time is not None or plan.due_time is not None
         )
         checks.append(
             EvalCheckResult(
                 name="no_invented_dates",
-                passed=not project_has_dates and not dated_tasks,
+                passed=not plan_has_dates and not dated_tasks,
                 detail=(
-                    f"project_has_dates={project_has_dates}; "
+                    f"plan_has_dates={plan_has_dates}; "
                     f"dated_tasks={dated_tasks}"
                 ),
             )

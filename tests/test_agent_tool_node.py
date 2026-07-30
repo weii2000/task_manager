@@ -24,7 +24,7 @@ def make_context(*, in_transaction: bool = True) -> AgentRunContext:
 
 
 def test_tool_node_validates_arguments_before_handler():
-    definition = TOOL_REGISTRY[AvailableTool.GET_PROJECT_TASK_TREE]
+    definition = TOOL_REGISTRY[AvailableTool.GET_PLAN_TASK_TREE]
     original_handler = definition.handler
     handler = AsyncMock()
     object.__setattr__(definition, "handler", handler)
@@ -34,7 +34,7 @@ def test_tool_node_validates_arguments_before_handler():
         pending_tool_calls=[
             ToolCall(
                 call_id="call-1",
-                tool_name=AvailableTool.GET_PROJECT_TASK_TREE,
+                tool_name=AvailableTool.GET_PLAN_TASK_TREE,
                 parameter={},
             )
         ],
@@ -60,10 +60,10 @@ def test_tool_node_validates_arguments_before_handler():
 
 
 def test_tool_node_records_successful_result():
-    definition = TOOL_REGISTRY[AvailableTool.GET_PROJECT_TASK_TREE]
+    definition = TOOL_REGISTRY[AvailableTool.GET_PLAN_TASK_TREE]
     original_handler = definition.handler
     handler = AsyncMock(
-        return_value={"project_id": 42, "task_tree": []}
+        return_value={"plan_id": 42, "task_tree": []}
     )
     object.__setattr__(definition, "handler", handler)
     state = State(
@@ -72,8 +72,8 @@ def test_tool_node_records_successful_result():
         pending_tool_calls=[
             ToolCall(
                 call_id="call-1",
-                tool_name=AvailableTool.GET_PROJECT_TASK_TREE,
-                parameter={"project_id": 42},
+                tool_name=AvailableTool.GET_PLAN_TASK_TREE,
+                parameter={"plan_id": 42},
             )
         ],
     )
@@ -90,18 +90,18 @@ def test_tool_node_records_successful_result():
 
     handler.assert_awaited_once()
     arguments = handler.await_args.args[1]
-    assert arguments.project_id == 42
+    assert arguments.plan_id == 42
     assert result.tool_results[0].status == ToolResultStatus.SUCCESS
     assert result.next_action == Action.REVIEW
     assert result.tool_results[0].phase == AgentPhase.REVIEWING
     assert result.tool_results[0].output == {
-        "project_id": 42,
+        "plan_id": 42,
         "task_tree": [],
     }
 
 
 def test_tool_node_closes_transaction_it_started():
-    definition = TOOL_REGISTRY[AvailableTool.LIST_USER_PROJECTS]
+    definition = TOOL_REGISTRY[AvailableTool.LIST_USER_PLANS]
     original_handler = definition.handler
     handler = AsyncMock(return_value=[])
     object.__setattr__(definition, "handler", handler)
@@ -113,7 +113,7 @@ def test_tool_node_closes_transaction_it_started():
         pending_tool_calls=[
             ToolCall(
                 call_id="call-1",
-                tool_name=AvailableTool.LIST_USER_PROJECTS,
+                tool_name=AvailableTool.LIST_USER_PLANS,
                 parameter={},
             )
         ],

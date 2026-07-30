@@ -1,6 +1,5 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -11,12 +10,13 @@ from agent.runtime.state import (
     MessageRole,
     PlanningDraft,
     PlanningInfo,
-    PlanningProject,
+    PlanningPlan,
     PlanningTask,
     State,
 )
 from exceptions.agent import AgentExecutionContextError
-from models.enums import CreationSource, ProjectStatus, TaskPriority, TaskStatus
+from models.enums import TaskPriority
+from schemas.plan_tree import PlanResult
 from services.plan_execution import persist_plan
 
 
@@ -25,7 +25,7 @@ def make_state() -> State:
         messages=[Message(role=MessageRole.USER, content="创建学习计划")],
         info=PlanningInfo(goal="完成 Agent 工程学习"),
         draft=PlanningDraft(
-            project=PlanningProject(
+            plan=PlanningPlan(
                 title="Agent 工程学习",
                 description="通过项目完成学习闭环",
                 start_time=datetime(
@@ -53,22 +53,17 @@ def make_state() -> State:
     )
 
 
-def test_persist_plan_creates_project_and_task_tree(monkeypatch):
-    project = SimpleNamespace(project_id=42, title="Agent 工程学习")
-    tasks = [
-        SimpleNamespace(task_id=101),
-        SimpleNamespace(task_id=102),
-        SimpleNamespace(task_id=103),
-    ]
-    create_project = AsyncMock(return_value=project)
-    create_task = AsyncMock(side_effect=tasks)
-    monkeypatch.setattr(
-        "services.plan_execution.create_project_by_data",
-        create_project,
+def test_persist_plan_creates_plan_and_task_tree(monkeypatch):
+    persist_plan_tree = AsyncMock(
+        return_value=PlanResult(
+            plan_id=42,
+            plan_title="Agent 工程学习",
+            created_task_count=3,
+        )
     )
     monkeypatch.setattr(
-        "services.plan_execution.create_task_by_data",
-        create_task,
+        "services.plan_execution.persist_plan_tree",
+        persist_plan_tree,
     )
     db = AsyncMock()
     context = AgentRunContext(user_id=7, db=db, session_id=9)
@@ -77,30 +72,25 @@ def test_persist_plan_creates_project_and_task_tree(monkeypatch):
         persist_plan(make_state(), context)
     )
 
-    project_data = create_project.await_args.args[0]
-    assert project_data["owner_user_id"] == 7
-    assert project_data["source_agent_session_id"] == 9
-    assert project_data["status"] == ProjectStatus.ACTIVE
-    assert project_data["creation_source"] == CreationSource.AGENT
-    assert project_data["goal"] == "完成 Agent 工程学习"
-    assert project_data["start_time"] == datetime(2026, 7, 12, 2)
-
-    task_calls = create_task.await_args_list
-    assert len(task_calls) == 3
-    first_task = task_calls[0].args[0]
-    child_task = task_calls[1].args[0]
-    second_task = task_calls[2].args[0]
-    assert first_task["parent_task_id"] is None
-    assert first_task["sort_order"] == 0
-    assert first_task["priority"] == TaskPriority.HIGH
-    assert first_task["status"] == TaskStatus.TODO
-    assert first_task["creation_source"] == CreationSource.AGENT
-    assert child_task["parent_task_id"] == 101
-    assert child_task["sort_order"] == 0
-    assert child_task["acceptance_criteria"] == "关键路径测试通过"
-    assert second_task["parent_task_id"] is None
-    assert second_task["sort_order"] == 1
-    assert result.project_id == 42
+    plan = persist_plan_tree.await_args.args[0]
+    assert plan.goal == "完成 Agent 工程学习"
+    assert plan.start_time == datetime(2026, 7, 12, 2)
+    assert plan.tasks[0].priority == TaskPriority.HIGH
+    assert plan.tasks[0].level == 1
+    assert plan.tasks[0].subtasks[0].level == 2
+    assert plan.tasks[0].subtasks[0].title == "补齐测试"
+    assert persist_plan_tree.await_args.args[1:] == (
+        "agent-session:9",
+        7,
+        db,
+    )
+    assert (
+        persist_plan_tree.await_args.kwargs[
+            "source_agent_session_id"
+        ]
+        == 9
+    )
+    assert result.plan_id == 42
     assert result.created_task_count == 3
 
 

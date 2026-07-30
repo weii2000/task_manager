@@ -11,41 +11,41 @@ from agent.runtime.state import (
     MessageRole,
     PlanDecision,
     PlanningDraft,
-    PlanningProject,
+    PlanningPlan,
     PlanningTask,
     State,
 )
 
 
-def test_planning_project_normalizes_time_to_utc_and_survives_round_trip():
+def test_planning_plan_normalizes_time_to_utc_and_survives_round_trip():
     china_time = timezone(timedelta(hours=8))
 
-    project = PlanningProject(
+    plan = PlanningPlan(
         title="学习计划",
         start_time=datetime(2026, 7, 12, 10, tzinfo=china_time),
     )
 
-    assert project.start_time == datetime(
+    assert plan.start_time == datetime(
         2026,
         7,
         12,
         2,
         tzinfo=timezone.utc,
     )
-    assert PlanningProject.model_validate_json(
-        project.model_dump_json()
-    ) == project
+    assert PlanningPlan.model_validate_json(
+        plan.model_dump_json()
+    ) == plan
 
 
-def test_planning_project_rejects_time_without_timezone():
+def test_planning_plan_rejects_time_without_timezone():
     with pytest.raises(ValidationError):
-        PlanningProject(
+        PlanningPlan(
             title="学习计划",
             start_time=datetime(2026, 7, 12, 10),
         )
 
 
-def test_review_action_requires_executable_project_and_tasks():
+def test_review_action_requires_executable_plan_and_tasks():
     with pytest.raises(ValidationError):
         PlanDecision(
             content="提交评审",
@@ -54,25 +54,25 @@ def test_review_action_requires_executable_project_and_tasks():
         )
 
 
-def test_planning_draft_rejects_task_tree_deeper_than_six_levels():
-    task = PlanningTask(title="第七层")
-    for depth in range(6, 0, -1):
+def test_planning_draft_rejects_task_tree_deeper_than_three_levels():
+    task = PlanningTask(title="第四层")
+    for depth in range(3, 0, -1):
         task = PlanningTask(title=f"第 {depth} 层", subtasks=[task])
 
     with pytest.raises(ValidationError):
         PlanningDraft(
-            project=PlanningProject(title="学习计划"),
+            plan=PlanningPlan(title="学习计划"),
             tasks=[task],
         )
 
 
-def test_planning_draft_accepts_six_task_levels():
-    task = PlanningTask(title="第六层")
-    for depth in range(5, 0, -1):
+def test_planning_draft_accepts_three_task_levels():
+    task = PlanningTask(title="第三层")
+    for depth in range(2, 0, -1):
         task = PlanningTask(title=f"第 {depth} 层", subtasks=[task])
 
     draft = PlanningDraft(
-        project=PlanningProject(title="学习计划"),
+        plan=PlanningPlan(title="学习计划"),
         tasks=[task],
     )
 
@@ -99,8 +99,8 @@ def test_completed_state_requires_execution_result():
 
 def test_execution_result_is_only_allowed_in_completed_state():
     execution = ExecutionResult(
-        project_id=42,
-        project_title="学习计划",
+        plan_id=42,
+        plan_title="学习计划",
         created_task_count=1,
         completed_at=datetime.now(timezone.utc),
     )

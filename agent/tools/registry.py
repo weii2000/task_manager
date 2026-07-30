@@ -6,13 +6,13 @@ from pydantic import BaseModel
 
 from agent.runtime.context import AgentRunContext
 from agent.runtime.state import AvailableTool
-from agent.tools.project import (
-    get_project_task_tree,
-    list_user_projects,
+from agent.tools.plan import (
+    get_plan_task_tree,
+    list_user_plans,
 )
 from agent.tools.schemas import (
-    GetProjectTaskTreeInput,
-    ListUserProjectsInput,
+    GetPlanTaskTreeInput,
+    ListUserPlansInput,
 )
 
 
@@ -24,15 +24,15 @@ class ToolDefinition:
 
 
 TOOL_REGISTRY: dict[AvailableTool, ToolDefinition] = {
-    AvailableTool.LIST_USER_PROJECTS: ToolDefinition(
-        description="查询当前用户已有项目，可按标题、描述或目标进行模糊搜索。",
-        input_schema=ListUserProjectsInput,
-        handler=list_user_projects,
+    AvailableTool.LIST_USER_PLANS: ToolDefinition(
+        description="查询当前用户已有计划，可按标题、描述或目标进行模糊搜索。",
+        input_schema=ListUserPlansInput,
+        handler=list_user_plans,
     ),
-    AvailableTool.GET_PROJECT_TASK_TREE: ToolDefinition(
-        description="查询指定项目的任务树，用于理解已有任务结构并避免重复规划。",
-        input_schema=GetProjectTaskTreeInput,
-        handler=get_project_task_tree,
+    AvailableTool.GET_PLAN_TASK_TREE: ToolDefinition(
+        description="查询指定计划的任务树，用于理解已有任务结构并避免重复规划。",
+        input_schema=GetPlanTaskTreeInput,
+        handler=get_plan_task_tree,
     ),
 }
 

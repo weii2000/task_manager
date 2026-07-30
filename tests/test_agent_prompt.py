@@ -31,8 +31,8 @@ def get_context(request) -> dict[str, object]:
 def test_plan_prompt_uses_history_and_planning_context():
     tool_call = ToolCall(
         call_id="call-1",
-        tool_name=AvailableTool.GET_PROJECT_TASK_TREE,
-        parameter={"project_id": 42},
+        tool_name=AvailableTool.GET_PLAN_TASK_TREE,
+        parameter={"plan_id": 42},
     )
     state = State(
         messages=[
@@ -47,11 +47,11 @@ def test_plan_prompt_uses_history_and_planning_context():
         tool_results=[
             ToolResult(
                 call_id="call-1",
-                tool_name=AvailableTool.GET_PROJECT_TASK_TREE,
-                arguments={"project_id": 42},
+                tool_name=AvailableTool.GET_PLAN_TASK_TREE,
+                arguments={"plan_id": 42},
                 phase=AgentPhase.PLANNING,
                 status=ToolResultStatus.SUCCESS,
-                output={"project_id": 42, "task_tree": []},
+                output={"plan_id": 42, "task_tree": []},
             )
         ],
     )
@@ -79,7 +79,7 @@ def test_plan_prompt_uses_history_and_planning_context():
     )
     assert context["recent_tool_results"][0]["call_id"] == "call-1"
     assert context["available_tools"][1]["input_schema"]["required"] == [
-        "project_id"
+        "plan_id"
     ]
     assert request.messages[2].content == "继续规划项目 42"
 
@@ -90,7 +90,7 @@ def test_review_prompt_includes_recent_tool_results_across_phases():
         tool_results=[
             ToolResult(
                 call_id="plan-call",
-                tool_name=AvailableTool.LIST_USER_PROJECTS,
+                tool_name=AvailableTool.LIST_USER_PLANS,
                 arguments={},
                 phase=AgentPhase.PLANNING,
                 status=ToolResultStatus.SUCCESS,
@@ -98,7 +98,7 @@ def test_review_prompt_includes_recent_tool_results_across_phases():
             ),
             ToolResult(
                 call_id="review-call",
-                tool_name=AvailableTool.LIST_USER_PROJECTS,
+                tool_name=AvailableTool.LIST_USER_PLANS,
                 arguments={},
                 phase=AgentPhase.REVIEWING,
                 status=ToolResultStatus.SUCCESS,
@@ -113,7 +113,7 @@ def test_review_prompt_includes_recent_tool_results_across_phases():
     assert context["recent_tool_results"] == [
         {
             "call_id": "plan-call",
-            "tool_name": "list_user_projects",
+            "tool_name": "list_user_plans",
             "arguments": {},
             "phase": "planning",
             "status": "success",
@@ -122,7 +122,7 @@ def test_review_prompt_includes_recent_tool_results_across_phases():
         },
         {
             "call_id": "review-call",
-            "tool_name": "list_user_projects",
+            "tool_name": "list_user_plans",
             "arguments": {},
             "phase": "reviewing",
             "status": "success",

@@ -9,12 +9,12 @@ from dependencies.auth import get_current_user
 from main import app
 from models.enums import (
     CreationSource,
-    ProjectStatus,
-    ProjectSystemType,
+    PlanStatus,
+    PlanSystemType,
     TaskPriority,
     TaskStatus,
 )
-from schemas.project import ProjectRead
+from schemas.plan import PlanRead
 from schemas.task import TaskRead
 
 
@@ -33,17 +33,17 @@ def fake_db():
     return object()
 
 
-def make_fake_project(
-    project_id: int = 1,
+def make_fake_plan(
+    plan_id: int = 1,
     owner_user_id: int = 1,
-    status: ProjectStatus = ProjectStatus.ACTIVE,
-    system_type: ProjectSystemType | None = None,
+    status: PlanStatus = PlanStatus.ACTIVE,
+    system_type: PlanSystemType | None = None,
     archived_time: datetime | None = None,
-) -> ProjectRead:
-    return ProjectRead(
-        project_id=project_id,
+) -> PlanRead:
+    return PlanRead(
+        plan_id=plan_id,
         owner_user_id=owner_user_id,
-        title=f"Project {project_id}",
+        title=f"Plan {plan_id}",
         description=None,
         goal=None,
         status=status,
@@ -59,21 +59,23 @@ def make_fake_project(
 
 
 @pytest.fixture
-def fake_project_factory():
-    return make_fake_project
+def fake_plan_factory():
+    return make_fake_plan
 
 
 def make_fake_task(
     task_id: int = 1,
-    project_id: int = 1,
+    plan_id: int = 1,
     parent_task_id: int | None = None,
-    status: TaskStatus = TaskStatus.TODO,
+    level: int = 1,
+    status: TaskStatus = TaskStatus.PENDING,
     archived_time: datetime | None = None,
 ) -> TaskRead:
     return TaskRead(
         task_id=task_id,
-        project_id=project_id,
+        plan_id=plan_id,
         parent_task_id=parent_task_id,
+        level=level,
         title=f"Task {task_id}",
         description=f"Description {task_id}",
         acceptance_criteria=None,
@@ -95,20 +97,28 @@ def fake_task_factory():
     return make_fake_task
 
 
-@pytest.fixture
-def client(fake_user, fake_db):
-
+@pytest.fixture(autouse=True)
+def app_dependency_overrides(fake_user, fake_db):
     async def override_get_current_user():
         return fake_user
+
     async def override_get_db():
         return fake_db
 
-    # 测试时用假函数替换真实登录验证
     app.dependency_overrides[get_current_user] = override_get_current_user
     app.dependency_overrides[get_db] = override_get_db
+    yield
+    app.dependency_overrides.clear()
 
+
+@pytest.fixture(scope="session")
+def app_client():
     with TestClient(app) as test_client:
         yield test_client
 
-    # 测试结束后清理
-    app.dependency_overrides.clear()
+
+@pytest.fixture
+def client(app_client):
+    app_client.cookies.clear()
+    yield app_client
+    app_client.cookies.clear()

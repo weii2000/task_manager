@@ -3,10 +3,10 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from core.datetime_utils import restore_utc_aware, to_utc_naive
-from models.enums import CreationSource, ProjectStatus, ProjectSystemType
+from models.enums import CreationSource, PlanStatus, PlanSystemType
 
 
-class ProjectCreate(BaseModel):
+class PlanCreate(BaseModel):
     title: str = Field(min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=5000)
     goal: str | None = Field(default=None, max_length=2000)
@@ -20,7 +20,7 @@ class ProjectCreate(BaseModel):
     def validate_title(cls, value: str) -> str:
         value = value.strip()
         if not value:
-            raise ValueError("项目标题不能为空")
+            raise ValueError("计划标题不能为空")
         return value
 
     @field_validator("start_time", "due_time")
@@ -41,7 +41,7 @@ class ProjectCreate(BaseModel):
         return self
 
 
-class ProjectUpdate(BaseModel):
+class PlanUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=5000)
     goal: str | None = Field(default=None, max_length=2000)
@@ -54,11 +54,11 @@ class ProjectUpdate(BaseModel):
     @classmethod
     def validate_title(cls, value: str | None) -> str:
         if value is None:
-            raise ValueError("项目标题不能设置为空")
+            raise ValueError("计划标题不能设置为空")
 
         value = value.strip()
         if not value:
-            raise ValueError("项目标题不能为空")
+            raise ValueError("计划标题不能为空")
         return value
 
     @field_validator("start_time", "due_time")
@@ -79,21 +79,21 @@ class ProjectUpdate(BaseModel):
         return self
 
 
-class ProjectStatusUpdate(BaseModel):
-    status: ProjectStatus
+class PlanStatusUpdate(BaseModel):
+    status: PlanStatus
 
     model_config = ConfigDict(extra="forbid")
 
 
-class ProjectRead(BaseModel):
-    project_id: int
+class PlanRead(BaseModel):
+    plan_id: int
     owner_user_id: int
     title: str
     description: str | None
     goal: str | None
-    status: ProjectStatus
+    status: PlanStatus
     creation_source: CreationSource
-    system_type: ProjectSystemType | None
+    system_type: PlanSystemType | None
     start_time: datetime | None
     due_time: datetime | None
     completed_time: datetime | None

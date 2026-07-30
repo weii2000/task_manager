@@ -8,7 +8,7 @@ from agent.runtime.state import (
     PlanDecision,
     PlanningDraft,
     PlanningInfo,
-    PlanningProject,
+    PlanningPlan,
     PlanningTask,
     ReviewCategory,
     ReviewDecision,
@@ -63,7 +63,7 @@ def test_plan_scorer_accepts_complete_constraint_preserving_draft():
             constraints=["每天最多投入 1 小时"],
         ),
         draft=PlanningDraft(
-            project=PlanningProject(title="FastAPI 任务管理 API"),
+            plan=PlanningPlan(title="FastAPI 任务管理 API"),
             tasks=[
                 PlanningTask(
                     title="设计接口",
@@ -98,7 +98,7 @@ def test_constraint_scorer_accepts_equivalent_word_order():
             constraints=["每天用于学习的时间不超过 1 小时"],
         ),
         draft=PlanningDraft(
-            project=PlanningProject(title="FastAPI 任务管理 API"),
+            plan=PlanningPlan(title="FastAPI 任务管理 API"),
             tasks=[
                 PlanningTask(
                     title=f"任务 {index}",
@@ -130,7 +130,7 @@ def test_plan_scorer_reports_each_failed_hard_requirement():
     failed_names = {check.name for check in checks if not check.passed}
 
     assert "action_correctness" in failed_names
-    assert "project_presence" in failed_names
+    assert "plan_presence" in failed_names
     assert "minimum_task_count" in failed_names
     assert "acceptance_criteria_coverage" in failed_names
     assert "constraint_retention" in failed_names
@@ -147,7 +147,7 @@ def test_maximum_task_count_is_an_observable_soft_metric():
             constraints=["每天最多投入 1 小时"],
         ),
         draft=PlanningDraft(
-            project=PlanningProject(title="FastAPI 任务管理 API"),
+            plan=PlanningPlan(title="FastAPI 任务管理 API"),
             tasks=[
                 PlanningTask(
                     title=f"任务 {index}",
@@ -178,7 +178,7 @@ def test_acceptance_coverage_only_counts_leaf_tasks():
             constraints=["每天最多投入 1 小时"],
         ),
         draft=PlanningDraft(
-            project=PlanningProject(title="FastAPI 任务管理 API"),
+            plan=PlanningPlan(title="FastAPI 任务管理 API"),
             tasks=[
                 PlanningTask(
                     title="分组任务",
@@ -267,7 +267,7 @@ def test_runner_uses_production_node_tool_validation():
             "input": case.input.model_copy(
                 update={
                     "available_tools": [
-                        AvailableTool.LIST_USER_PROJECTS
+                        AvailableTool.LIST_USER_PLANS
                     ]
                 }
             )
@@ -278,8 +278,8 @@ def test_runner_uses_production_node_tool_validation():
         next_action=Action.USE_TOOL,
         tool_calls=[
             ToolCall(
-                tool_name=AvailableTool.GET_PROJECT_TASK_TREE,
-                parameter={"project_id": 1},
+                tool_name=AvailableTool.GET_PLAN_TASK_TREE,
+                parameter={"plan_id": 1},
             )
         ],
     )
@@ -312,13 +312,13 @@ def test_question_count_is_observable_but_does_not_fail_case():
     assert result.passed is True
 
 
-def test_review_quality_cases_include_completed_project_lookup():
+def test_review_quality_cases_include_completed_plan_lookup():
     case = get_case("review_detects_missing_acceptance_criteria")
     state = case.build_state()
 
     assert len(state.tool_results) == 1
     assert state.tool_results[0].tool_name == (
-        AvailableTool.LIST_USER_PROJECTS
+        AvailableTool.LIST_USER_PLANS
     )
     assert state.tool_results[0].output == []
 

@@ -14,7 +14,7 @@ from agent.runtime.state import (
     MessageRole,
     PlanningDraft,
     PlanningInfo,
-    PlanningProject,
+    PlanningPlan,
     PlanningTask,
     State,
 )
@@ -263,8 +263,8 @@ def test_resume_rejects_stale_llm_result(monkeypatch):
         phase=AgentPhase.COMPLETED,
         next_action=None,
         execution=ExecutionResult(
-            project_id=42,
-            project_title="学习计划",
+            plan_id=42,
+            plan_title="学习计划",
             created_task_count=1,
             completed_at=datetime.now(timezone.utc),
         ),
@@ -351,7 +351,7 @@ def test_confirm_approved_executes_plan(monkeypatch):
         phase=AgentPhase.CONFIRMING,
         next_action=None,
         draft=PlanningDraft(
-            project=PlanningProject(title="学习计划"),
+            plan=PlanningPlan(title="学习计划"),
             tasks=[PlanningTask(title="完成第一阶段学习")],
         ),
     )
@@ -362,8 +362,8 @@ def test_confirm_approved_executes_plan(monkeypatch):
     db = make_db_with_transaction()
     flow = MagicMock()
     execution = ExecutionResult(
-        project_id=42,
-        project_title="学习计划",
+        plan_id=42,
+        plan_title="学习计划",
         created_task_count=1,
         completed_at=datetime.now(timezone.utc),
     )
@@ -493,8 +493,8 @@ def test_confirm_rejected_replans_with_feedback(monkeypatch):
 
 def test_repeated_approval_returns_existing_execution(monkeypatch):
     execution = ExecutionResult(
-        project_id=42,
-        project_title="学习计划",
+        plan_id=42,
+        plan_title="学习计划",
         created_task_count=1,
         completed_at=datetime.now(timezone.utc),
     )

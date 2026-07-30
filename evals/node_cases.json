@@ -35,7 +35,7 @@
       },
       "expected": {
         "allowed_actions": ["review"],
-        "require_project": true,
+        "require_plan": true,
         "min_task_count": 3,
         "max_task_count": 20,
         "min_acceptance_criteria_coverage": 0.6,
@@ -51,7 +51,7 @@
       }
     },
     {
-      "case_id": "plan_respects_explicit_project_window",
+      "case_id": "plan_respects_explicit_plan_window",
       "description": "Explicit start and due times should be represented and bound the generated tasks.",
       "target": "plan",
       "input": {
@@ -64,17 +64,17 @@
       },
       "expected": {
         "allowed_actions": ["review"],
-        "require_project": true,
-        "require_project_start_time": true,
-        "require_project_due_time": true,
-        "tasks_within_project_window": true,
+        "require_plan": true,
+        "require_plan_start_time": true,
+        "require_plan_due_time": true,
+        "tasks_within_plan_window": true,
         "min_task_count": 4,
         "min_acceptance_criteria_coverage": 0.5
       }
     },
     {
       "case_id": "plan_requests_duplicate_lookup",
-      "description": "An explicit duplicate-project check should select the project-list tool.",
+      "description": "An explicit duplicate-plan check should select the plan-list tool.",
       "target": "plan",
       "input": {
         "messages": [
@@ -86,7 +86,7 @@
       },
       "expected": {
         "allowed_actions": ["use_tool"],
-        "required_tool": "list_user_projects"
+        "required_tool": "list_user_plans"
       }
     },
     {
@@ -106,7 +106,7 @@
           "constraints": ["两周内完成"]
         },
         "draft": {
-          "project": {
+          "plan": {
             "title": "FastAPI 任务 API"
           },
           "tasks": [
@@ -134,7 +134,7 @@
       },
       "expected": {
         "allowed_actions": ["review"],
-        "require_project": true,
+        "require_plan": true,
         "min_task_count": 2,
         "min_acceptance_criteria_coverage": 1.0
       }
@@ -165,7 +165,7 @@
       },
       "expected": {
         "allowed_actions": ["review"],
-        "require_project": true,
+        "require_plan": true,
         "min_task_count": 3,
         "required_constraints": [
           {
@@ -246,7 +246,7 @@
           "constraints": ["2026-08-03 到 2026-08-30（UTC）完成"]
         },
         "draft": {
-          "project": {
+          "plan": {
             "title": "FastAPI 任务管理 API",
             "description": "实现具有 JWT 认证、项目和任务 CRUD、用户数据隔离、自动化测试和启动文档的后端作品集。",
             "start_time": "2026-08-03T09:00:00Z",
@@ -263,7 +263,7 @@
             },
             {
               "title": "确定 API 契约与数据模型",
-              "description": "设计 User、Project、Task 模型以及请求响应 Schema、状态码和所有权规则。",
+              "description": "设计 User、Plan、Task 模型以及请求响应 Schema、状态码和所有权规则。",
               "acceptance_criteria": "模型关系、唯一约束、核心接口和主要失败状态码形成可评审清单。",
               "priority": "high",
               "start_time": "2026-08-05T09:00:00Z",
@@ -305,8 +305,8 @@
         },
         "tool_results": [
           {
-            "call_id": "seed-project-list",
-            "tool_name": "list_user_projects",
+            "call_id": "seed-plan-list",
+            "tool_name": "list_user_plans",
             "arguments": {},
             "phase": "reviewing",
             "status": "success",
@@ -335,7 +335,7 @@
           "constraints": []
         },
         "draft": {
-          "project": {
+          "plan": {
             "title": "FastAPI 作品集"
           },
           "tasks": [
@@ -352,8 +352,8 @@
         },
         "tool_results": [
           {
-            "call_id": "seed-project-list",
-            "tool_name": "list_user_projects",
+            "call_id": "seed-plan-list",
+            "tool_name": "list_user_plans",
             "arguments": {},
             "phase": "reviewing",
             "status": "success",
@@ -388,7 +388,7 @@
           "constraints": []
         },
         "draft": {
-          "project": {
+          "plan": {
             "title": "英语口语提升计划"
           },
           "tasks": [
@@ -404,8 +404,8 @@
         },
         "tool_results": [
           {
-            "call_id": "seed-project-list",
-            "tool_name": "list_user_projects",
+            "call_id": "seed-plan-list",
+            "tool_name": "list_user_plans",
             "arguments": {},
             "phase": "reviewing",
             "status": "success",
@@ -425,7 +425,7 @@
     },
     {
       "case_id": "review_detects_infeasible_schedule",
-      "description": "Several multi-day sequential tasks cannot fit into a one-day project window.",
+      "description": "Several multi-day sequential tasks cannot fit into a one-day plan window.",
       "target": "review",
       "input": {
         "messages": [
@@ -440,7 +440,7 @@
           "constraints": ["必须在两天内完成"]
         },
         "draft": {
-          "project": {
+          "plan": {
             "title": "完整后端项目",
             "start_time": "2026-08-01T00:00:00Z",
             "due_time": "2026-08-02T23:59:00Z"
@@ -471,8 +471,8 @@
         },
         "tool_results": [
           {
-            "call_id": "seed-project-list",
-            "tool_name": "list_user_projects",
+            "call_id": "seed-plan-list",
+            "tool_name": "list_user_plans",
             "arguments": {},
             "phase": "reviewing",
             "status": "success",
@@ -492,7 +492,7 @@
     },
     {
       "case_id": "review_requests_duplicate_lookup",
-      "description": "Review should obtain project data before claiming a new draft is not a duplicate.",
+      "description": "Review should obtain plan data before claiming a new draft is not a duplicate.",
       "target": "review",
       "input": {
         "messages": [
@@ -507,7 +507,7 @@
           "constraints": ["不能与已有项目重复"]
         },
         "draft": {
-          "project": {
+          "plan": {
             "title": "AI Agent 求职准备"
           },
           "tasks": [
@@ -524,7 +524,7 @@
       },
       "expected": {
         "allowed_actions": ["use_tool"],
-        "required_tool": "list_user_projects"
+        "required_tool": "list_user_plans"
       }
     },
     {
@@ -544,7 +544,7 @@
           "constraints": []
         },
         "draft": {
-          "project": {
+          "plan": {
             "title": "FastAPI API"
           },
           "tasks": [
@@ -564,8 +564,8 @@
         },
         "tool_results": [
           {
-            "call_id": "seed-project-list",
-            "tool_name": "list_user_projects",
+            "call_id": "seed-plan-list",
+            "tool_name": "list_user_plans",
             "arguments": {},
             "phase": "reviewing",
             "status": "success",

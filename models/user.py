@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from models.agent import AgentSession
     from models.auth import RefreshToken
     from models.memory import UserMemory
-    from models.project import Project
+    from models.plan import Plan
 
 
 class User(Base):
@@ -21,8 +21,8 @@ class User(Base):
     email: Mapped[str | None] = mapped_column(String(50), nullable=True, unique=True)
     bio: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
-    projects: Mapped[list["Project"]] = relationship(
-        "Project",
+    plans: Mapped[list["Plan"]] = relationship(
+        "Plan",
         back_populates="owner",
         cascade="all, delete-orphan",
     )

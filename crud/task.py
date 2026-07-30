@@ -1,8 +1,8 @@
-from sqlalchemy import exists, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.enums import TaskStatus
-from models.project import Project
+from models.plan import Plan
 from models.task import Task
 
 
@@ -25,19 +25,19 @@ async def get_task_by_id_and_owner_user_id(
     result = await db.execute(
         select(Task)
         .join(
-            Project,
-            Task.project_id == Project.project_id,
+            Plan,
+            Task.plan_id == Plan.plan_id,
         )
         .where(
             Task.task_id == task_id,
-            Project.owner_user_id == owner_user_id,
+            Plan.owner_user_id == owner_user_id,
         )
     )
     return result.scalar_one_or_none()
 
 
-async def get_tasks_by_project_id_and_owner_user_id(
-    project_id: int,
+async def get_tasks_by_plan_id_and_owner_user_id(
+    plan_id: int,
     owner_user_id: int,
     db: AsyncSession,
     archived: bool = False,
@@ -51,12 +51,12 @@ async def get_tasks_by_project_id_and_owner_user_id(
     result = await db.execute(
         select(Task)
         .join(
-            Project,
-            Task.project_id == Project.project_id,
+            Plan,
+            Task.plan_id == Plan.plan_id,
         )
         .where(
-            Task.project_id == project_id,
-            Project.owner_user_id == owner_user_id,
+            Task.plan_id == plan_id,
+            Plan.owner_user_id == owner_user_id,
             archive_condition,
         )
         .order_by(
@@ -65,6 +65,18 @@ async def get_tasks_by_project_id_and_owner_user_id(
         )
     )
     return list(result.scalars().all())
+
+
+async def count_tasks_by_plan_id(
+    plan_id: int,
+    db: AsyncSession,
+) -> int:
+    result = await db.execute(
+        select(func.count(Task.task_id)).where(
+            Task.plan_id == plan_id,
+        )
+    )
+    return result.scalar_one()
 
 
 async def update_task_by_data(
@@ -91,7 +103,7 @@ async def has_incomplete_child_tasks(
                 Task.archived_time.is_(None),
                 Task.status.notin_(
                     (
-                        TaskStatus.DONE,
+                        TaskStatus.COMPLETED,
                         TaskStatus.CANCELLED,
                     )
                 ),
@@ -101,18 +113,18 @@ async def has_incomplete_child_tasks(
     return result.scalar_one()
 
 
-async def has_incomplete_project_tasks(
-    project_id: int,
+async def has_incomplete_plan_tasks(
+    plan_id: int,
     db: AsyncSession,
 ) -> bool:
     result = await db.execute(
         select(
             exists().where(
-                Task.project_id == project_id,
+                Task.plan_id == plan_id,
                 Task.archived_time.is_(None),
                 Task.status.notin_(
                     (
-                        TaskStatus.DONE,
+                        TaskStatus.COMPLETED,
                         TaskStatus.CANCELLED,
                     )
                 ),

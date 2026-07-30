@@ -112,7 +112,7 @@ class FrontendHandler(SimpleHTTPRequestHandler):
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Serve the Task Manager frontend")
+    parser = argparse.ArgumentParser(description="Serve the Planwise frontend")
     parser.add_argument("--port", type=int, default=5173)
     parser.add_argument("--api-url", default="http://127.0.0.1:8000")
     parser.add_argument("--host", default="127.0.0.1") #

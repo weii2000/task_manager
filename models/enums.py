@@ -1,14 +1,14 @@
 from enum import StrEnum
 
 
-class ProjectStatus(StrEnum):
+class PlanStatus(StrEnum):
     PLANNING = "planning"
     ACTIVE = "active"
     PAUSED = "paused"
     COMPLETED = "completed"
 
 
-class ProjectSystemType(StrEnum):
+class PlanSystemType(StrEnum):
     INBOX = "inbox"
 
 
@@ -19,10 +19,10 @@ class CreationSource(StrEnum):
 
 
 class TaskStatus(StrEnum):
-    TODO = "todo"
+    PENDING = "pending"
     IN_PROGRESS = "in_progress"
     BLOCKED = "blocked"
-    DONE = "done"
+    COMPLETED = "completed"
     CANCELLED = "cancelled"
 
 

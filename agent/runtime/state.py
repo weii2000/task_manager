@@ -43,8 +43,8 @@ class Action(StrEnum):
 
 
 class AvailableTool(StrEnum):
-    LIST_USER_PROJECTS = auto()
-    GET_PROJECT_TASK_TREE = auto()
+    LIST_USER_PLANS = auto()
+    GET_PLAN_TASK_TREE = auto()
 
 
 class ToolCall(BaseModel):
@@ -64,7 +64,7 @@ class PlanningInfo(BaseModel):
     ] | None = Field(default=None, max_length=20)
 
 
-class PlanningProject(BaseModel):
+class PlanningPlan(BaseModel):
     title: str = Field(min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=5000)
     start_time: datetime | None = None
@@ -75,7 +75,7 @@ class PlanningProject(BaseModel):
     def validate_title(cls, value: str) -> str:
         normalized = value.strip()
         if not normalized:
-            raise ValueError("project title cannot be blank")
+            raise ValueError("plan title cannot be blank")
         return normalized
 
     @field_validator("start_time", "due_time")
@@ -86,13 +86,13 @@ class PlanningProject(BaseModel):
         return to_utc_aware(value)
 
     @model_validator(mode="after")
-    def validate_time_range(self) -> PlanningProject:
+    def validate_time_range(self) -> PlanningPlan:
         if (
             self.start_time is not None
             and self.due_time is not None
             and self.due_time < self.start_time
         ):
-            raise ValueError("project due time cannot be before start time")
+            raise ValueError("plan due time cannot be before start time")
         return self
 
 
@@ -132,7 +132,7 @@ class PlanningTask(BaseModel):
 
 
 class PlanningDraft(BaseModel):
-    project: PlanningProject | None = None
+    plan: PlanningPlan | None = None
     tasks: list[PlanningTask] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -142,8 +142,8 @@ class PlanningDraft(BaseModel):
         def visit(tasks: list[PlanningTask], depth: int) -> None:
             nonlocal task_count
             for task in tasks:
-                if depth > 6:
-                    raise ValueError("task tree depth cannot exceed 6")
+                if depth > 3:
+                    raise ValueError("task tree depth cannot exceed 3")
                 task_count += 1
                 if task_count > 100:
                     raise ValueError("task count cannot exceed 100")
@@ -207,8 +207,8 @@ class PlanDecision(BaseDecision):
         }:
             raise ValueError("unsupported plan action")
         if self.next_action == Action.REVIEW:
-            if self.draft.project is None:
-                raise ValueError("review action requires project details")
+            if self.draft.plan is None:
+                raise ValueError("review action requires plan details")
             if not self.draft.tasks:
                 raise ValueError("review action requires at least one task")
         return self
@@ -247,8 +247,8 @@ class HumanDecision(BaseModel):
 
 
 class ExecutionResult(BaseModel):
-    project_id: int = Field(gt=0)
-    project_title: str = Field(min_length=1, max_length=100)
+    plan_id: int = Field(gt=0)
+    plan_title: str = Field(min_length=1, max_length=100)
     created_task_count: int = Field(ge=1, le=100)
     completed_at: datetime
 

@@ -11,7 +11,7 @@ from agent.runtime.state import (
     PlanDecision,
     PlanningDraft,
     PlanningInfo,
-    PlanningProject,
+    PlanningPlan,
     PlanningTask,
     ReviewCategory,
     ReviewDecision,
@@ -46,7 +46,7 @@ class SequenceProvider:
 
 def make_draft(*, complete: bool = True) -> PlanningDraft:
     return PlanningDraft(
-        project=PlanningProject(title="FastAPI 项目"),
+        plan=PlanningPlan(title="FastAPI 项目"),
         tasks=[
             PlanningTask(
                 title=f"任务 {index}",
@@ -133,7 +133,7 @@ def test_clarify_workflow_resumes_with_user_follow_up():
                 Action.USE_TOOL,
                 tool_calls=[
                     ToolCall(
-                        tool_name=AvailableTool.LIST_USER_PROJECTS,
+                        tool_name=AvailableTool.LIST_USER_PLANS,
                         parameter={},
                     )
                 ],
@@ -157,7 +157,7 @@ def test_clarify_workflow_resumes_with_user_follow_up():
 def test_tool_workflow_uses_fixture_and_restores_registry():
     case = get_case("lookup_then_plan_and_confirm")
     original_handler = TOOL_REGISTRY[
-        AvailableTool.LIST_USER_PROJECTS
+        AvailableTool.LIST_USER_PLANS
     ].handler
     provider = SequenceProvider(
         [
@@ -165,7 +165,7 @@ def test_tool_workflow_uses_fixture_and_restores_registry():
                 Action.USE_TOOL,
                 tool_calls=[
                     ToolCall(
-                        tool_name=AvailableTool.LIST_USER_PROJECTS,
+                        tool_name=AvailableTool.LIST_USER_PLANS,
                         parameter={},
                     )
                 ],
@@ -179,10 +179,10 @@ def test_tool_workflow_uses_fixture_and_restores_registry():
 
     assert result.passed is True
     assert result.tool_call_counts == {
-        AvailableTool.LIST_USER_PROJECTS: 1
+        AvailableTool.LIST_USER_PLANS: 1
     }
     assert (
-        TOOL_REGISTRY[AvailableTool.LIST_USER_PROJECTS].handler
+        TOOL_REGISTRY[AvailableTool.LIST_USER_PLANS].handler
         is original_handler
     )
 
@@ -196,7 +196,7 @@ def test_review_workflow_replans_before_confirming():
                 Action.USE_TOOL,
                 tool_calls=[
                     ToolCall(
-                        tool_name=AvailableTool.LIST_USER_PROJECTS,
+                        tool_name=AvailableTool.LIST_USER_PLANS,
                         parameter={},
                     )
                 ],
@@ -232,7 +232,7 @@ def test_extra_valid_replan_only_fails_soft_path_checks():
                 Action.USE_TOOL,
                 tool_calls=[
                     ToolCall(
-                        tool_name=AvailableTool.LIST_USER_PROJECTS,
+                        tool_name=AvailableTool.LIST_USER_PLANS,
                         parameter={},
                     )
                 ],
@@ -259,8 +259,8 @@ def test_extra_valid_replan_only_fails_soft_path_checks():
 def test_workflow_rejects_dates_invented_without_user_input():
     case = get_case("lookup_then_plan_and_confirm")
     draft = make_draft()
-    assert draft.project is not None
-    draft.project.start_time = datetime(
+    assert draft.plan is not None
+    draft.plan.start_time = datetime(
         2025,
         8,
         1,
@@ -272,7 +272,7 @@ def test_workflow_rejects_dates_invented_without_user_input():
                 Action.USE_TOOL,
                 tool_calls=[
                     ToolCall(
-                        tool_name=AvailableTool.LIST_USER_PROJECTS,
+                        tool_name=AvailableTool.LIST_USER_PLANS,
                         parameter={},
                     )
                 ],
@@ -305,7 +305,7 @@ def test_workflow_acceptance_coverage_only_counts_leaf_tasks():
             Message(role=MessageRole.USER, content="规划 FastAPI 项目")
         ],
         draft=PlanningDraft(
-            project=PlanningProject(title="FastAPI 项目"),
+            plan=PlanningPlan(title="FastAPI 项目"),
             tasks=[
                 PlanningTask(
                     title="分组任务",
@@ -338,7 +338,7 @@ def test_workflow_report_matches_node_layout_and_utc_format(tmp_path):
                         tool_calls=[
                             ToolCall(
                                 tool_name=(
-                                    AvailableTool.LIST_USER_PROJECTS
+                                    AvailableTool.LIST_USER_PLANS
                                 ),
                                 parameter={},
                             )

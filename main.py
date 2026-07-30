@@ -12,16 +12,20 @@ from exceptions.handlers import (
     unexpected_exception_handler,
     validation_exception_handler,
 )
-from router import agent, auth, memory, project, task, user
+from mcp_server import mcp_http_app, mcp_server
+from router import agent, auth, memory, plan, task, user
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    yield
-    await async_engine.dispose()
+    try:
+        async with mcp_server.session_manager.run():
+            yield
+    finally:
+        await async_engine.dispose()
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(title="Planwise", lifespan=lifespan)
 
 app.add_exception_handler(
     AppError,
@@ -45,7 +49,8 @@ app.add_exception_handler(
 
 app.include_router(auth.router)
 app.include_router(user.router)
-app.include_router(project.router)
+app.include_router(plan.router)
 app.include_router(task.router)
 app.include_router(agent.router)
 app.include_router(memory.router)
+app.mount("/", mcp_http_app)

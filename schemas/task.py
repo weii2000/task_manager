@@ -7,7 +7,7 @@ from models.enums import CreationSource, TaskPriority, TaskStatus
 
 
 class TaskCreate(BaseModel):
-    project_id: int | None = Field(default=None, gt=0)
+    plan_id: int | None = Field(default=None, gt=0)
     parent_task_id: int | None = Field(default=None, gt=0)
 
     title: str = Field(min_length=1, max_length=100)
@@ -121,8 +121,9 @@ class TaskStatusUpdate(BaseModel):
 
 class TaskRead(BaseModel):
     task_id: int
-    project_id: int
+    plan_id: int
     parent_task_id: int | None
+    level: int = Field(ge=1, le=3)
 
     title: str
     description: str | None

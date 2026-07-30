@@ -14,32 +14,37 @@ from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.base import Base
-from models.enums import CreationSource, ProjectStatus, ProjectSystemType
+from models.enums import CreationSource, PlanStatus, PlanSystemType
 
 if TYPE_CHECKING:
     from models.task import Task
     from models.user import User
 
 
-class Project(Base):
-    __tablename__ = "projects"
+class Plan(Base):
+    __tablename__ = "plans"
     __table_args__ = (
         CheckConstraint(
             "start_time IS NULL OR due_time IS NULL OR due_time >= start_time",
-            name="ck_projects_due_after_start",
+            name="ck_plans_due_after_start",
         ),
         UniqueConstraint(
             "owner_user_id",
             "system_type",
-            name="uq_projects_owner_system_type",
+            name="uq_plans_owner_system_type",
         ),
         UniqueConstraint(
             "source_agent_session_id",
-            name="uq_projects_source_agent_session_id",
+            name="uq_plans_source_agent_session_id",
+        ),
+        UniqueConstraint(
+            "owner_user_id",
+            "idempotency_key",
+            name="uq_plans_owner_idempotency_key",
         ),
     )
 
-    project_id: Mapped[int] = mapped_column(
+    plan_id: Mapped[int] = mapped_column(
         Integer, 
         primary_key=True
     )
@@ -52,6 +57,10 @@ class Project(Base):
     source_agent_session_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("agent_session.session_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    idempotency_key: Mapped[str | None] = mapped_column(
+        String(64),
         nullable=True,
     )
     title: Mapped[str] = mapped_column(
@@ -67,12 +76,12 @@ class Project(Base):
         Text,
         nullable=True
     )
-    status: Mapped[ProjectStatus] = mapped_column(
+    status: Mapped[PlanStatus] = mapped_column(
         SAEnum(
-            ProjectStatus,
+            PlanStatus,
             values_callable=lambda enum_cls: [e.value for e in enum_cls],
         ),
-        default=ProjectStatus.PLANNING,
+        default=PlanStatus.PLANNING,
         nullable=False,
     )
     creation_source: Mapped[CreationSource] = mapped_column(
@@ -83,9 +92,9 @@ class Project(Base):
         default=CreationSource.MANUAL,
         nullable=False,
     )
-    system_type: Mapped[ProjectSystemType | None] = mapped_column(
+    system_type: Mapped[PlanSystemType | None] = mapped_column(
         SAEnum(
-            ProjectSystemType,
+            PlanSystemType,
             values_callable=lambda enum_cls: [e.value for e in enum_cls],
         ),
         nullable=True,
@@ -108,10 +117,10 @@ class Project(Base):
     )
     owner: Mapped["User"] = relationship(
         "User",
-        back_populates="projects",
+        back_populates="plans",
     )
     tasks: Mapped[list["Task"]] = relationship(
         "Task",
-        back_populates="project",
+        back_populates="plan",
         cascade="all, delete-orphan",
     )

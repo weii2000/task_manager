@@ -1,21 +1,21 @@
-# Task Manager：智能任务规划系统
+# Planwise：智能任务规划系统
 
 一个由 Agent 驱动的任务规划与管理系统。
 
-用户可以用自然语言描述一个明确或模糊的目标，系统会经过需求澄清、结构化规划、工具查询、计划评审和人工确认，最终把通过审核的计划保存为项目与任务树。计划保存后，用户可以继续维护任务状态并跟踪完成进度。
+用户可以用自然语言描述一个明确或模糊的目标，系统会经过需求澄清、结构化规划、工具查询、计划评审和人工确认，最终把通过审核的计划保存为 Plan 与 Task 树。计划保存后，用户可以继续维护任务状态并跟踪完成进度。
 
-项目聚焦于“从自然语言目标到可追踪计划”的规划闭环，而不是只生成一段静态待办文本。
+Planwise 聚焦于“从自然语言目标到可追踪计划”的规划闭环，而不是只生成一段静态待办文本。
 
 ## 当前能力
 
 - 使用自然语言创建并持续完善计划。
 - 在信息不足、目标冲突或约束不可满足时向用户澄清。
-- 将目标、约束、验收标准、项目和任务树转换为结构化数据。
-- 调用只读工具查询用户已有项目和任务，辅助发现重复或冲突。
+- 将目标、约束、验收标准、Plan 和 Task 树转换为结构化数据。
+- 调用只读工具查询用户已有 Plan 和 Task，辅助发现重复或冲突。
 - 在计划完成后自动进入独立的 Review 阶段，检查完整性、可行性、时间安排、重复和冲突。
 - 在计划真正写入数据库前设置人工确认边界（Human-in-the-loop）。
-- 用户确认后，在同一事务中创建项目和递归任务树。
-- 通过项目和任务接口维护状态、优先级、层级关系与归档状态。
+- 用户确认后，在同一事务中创建 Plan 和递归 Task 树。
+- 通过 Plan 和 Task 接口维护状态、优先级、层级关系与归档状态。
 - 支持对话上下文压缩，以及经过人工确认的长期记忆。
 - 支持 Agent 会话持久化与恢复，降低长请求断开后前后端状态不一致的影响。
 - 提供确定性测试和基于真实模型的 Agent Eval。
@@ -27,16 +27,16 @@ flowchart LR
     U["用户目标"]:::human --> P["Plan<br/>理解目标 · 生成草稿"]:::agent
     P -->|信息不足或需要取舍| C["Clarify<br/>单点澄清"]:::human
     C -->|用户补充| P
-    P -->|需要已有数据| PT["Read-only Tool<br/>查询项目与任务"]:::tool
+    P -->|需要已有数据| PT["Read-only Tool<br/>查询 Plan 与 Task"]:::tool
     PT --> P
     P -->|草稿就绪| R["Review<br/>独立评审"]:::agent
-    R -->|核对重复与冲突| RT["Read-only Tool<br/>查询项目与任务"]:::tool
+    R -->|核对重复与冲突| RT["Read-only Tool<br/>查询 Plan 与 Task"]:::tool
     RT --> R
     R -->|发现阻塞问题| P
     R -->|可以确认| H["Human Confirm<br/>人工审批"]:::human
     H -->|拒绝并反馈| P
     H -->|批准| W["Apply Plan<br/>单事务写入"]:::service
-    W --> DB[("Project + Task Tree")]:::data
+    W --> DB[("Plan + Task Tree")]:::data
 
     classDef human fill:#FFF7ED,stroke:#EA580C,color:#7C2D12,stroke-width:1.5px
     classDef agent fill:#EEF2FF,stroke:#4F46E5,color:#312E81,stroke-width:1.5px
@@ -61,14 +61,14 @@ Plan 负责理解目标并生成计划，Review 使用独立提示词和结构�
 
 Agent 当前可以调用以下只读工具：
 
-- 查询当前用户的项目列表；
-- 查询指定项目的任务树。
+- 查询当前用户的 Plan 列表；
+- 查询指定 Plan 的 Task 树。
 
 工具数据按当前用户隔离，用于识别已有计划、重复任务和潜在冲突。写操作不会由规划或评审节点直接执行。
 
 ### 4. 人工确认与原子落库
 
-计划必须经过人工确认才能写入业务表。批准后，项目和全部任务在同一个数据库事务中创建；任意一步失败都会回滚，避免只创建项目或只写入部分任务。重复批准已完成会话时会返回已有结果，避免重复落库。
+计划必须经过人工确认才能写入业务表。批准后，Plan 和全部 Task 在同一个数据库事务中创建；任意一步失败都会回滚，避免只创建 Plan 或只写入部分 Task。重复批准已完成会话时会返回已有结果，避免重复落库。
 
 ### 5. 两层记忆
 
@@ -96,13 +96,13 @@ flowchart TB
 
     subgraph APPLICATION["Application Layer"]
         AGENT_SERVICE["Agent Service<br/>会话与事务编排"]:::service
-        DOMAIN_SERVICE["Project · Task · Memory Services<br/>业务规则"]:::service
-        PLAN_WRITE["Plan Persistence<br/>原子写入项目与任务树"]:::service
+        DOMAIN_SERVICE["Plan · Task · Memory Services<br/>业务规则"]:::service
+        PLAN_WRITE["Plan Persistence<br/>原子写入 Plan 与 Task 树"]:::service
     end
 
     subgraph AGENT["Agent Runtime"]
         RUNTIME["Flow · Nodes · State<br/>确定性状态机"]:::agent
-        TOOLS["Read-only Tools<br/>项目与任务查询"]:::tool
+        TOOLS["Read-only Tools<br/>Plan 与 Task 查询"]:::tool
     end
 
     LLM["LLM Provider<br/>结构化语义决策"]:::external
@@ -153,7 +153,7 @@ flowchart TB
 ## 项目结构
 
 ```text
-task_manager/
+planwise/
 ├── agent/          # Prompt、Provider、Runtime Flow、工具与记忆
 ├── alembic/        # 数据库迁移
 ├── core/           # 配置、安全与日志
@@ -192,10 +192,10 @@ uv sync
 
 ### 3. 创建数据库
 
-下面以本地数据库名 `task_manager` 为例：
+下面以本地数据库名 `planwise` 为例：
 
 ```sql
-CREATE DATABASE task_manager
+CREATE DATABASE planwise
     CHARACTER SET utf8mb4
     COLLATE utf8mb4_unicode_ci;
 ```
@@ -275,7 +275,7 @@ uv run python frontend/server.py \
 | --- | --- | --- |
 | 认证 | `/api/auth` | 注册、登录、刷新令牌和退出 |
 | 用户 | `/api/user` | 查询和更新当前用户 |
-| 项目 | `/api/projects` | 项目创建、查询、更新、归档与恢复 |
+| Plan | `/api/plans` | Plan 创建、查询、更新、归档与恢复 |
 | 任务 | `/api/tasks` | 任务树管理、状态更新、归档与恢复 |
 | Agent | `/api/agent` | 创建会话、继续会话、恢复状态和人工确认 |
 | 记忆 | `/api/memories` | 长期记忆提取、查询、确认、编辑和归档 |

@@ -13,11 +13,11 @@ def test_create_task_success(
     monkeypatch,
 ):
     request_body = {
-        "project_id": 2,
+        "plan_id": 2,
         "title": "学习 pytest",
         "description": "重写 Task Router 测试",
     }
-    task = fake_task_factory(task_id=3, project_id=2)
+    task = fake_task_factory(task_id=3, plan_id=2)
     mock_service = AsyncMock(return_value=task)
     monkeypatch.setattr(
         "router.task.create_task_for_user",
@@ -60,7 +60,7 @@ def test_create_task_rejects_legacy_fields(client, monkeypatch):
     mock_service.assert_not_awaited()
 
 
-def test_get_tasks_passes_project_and_archive_filter(
+def test_get_tasks_passes_plan_and_archive_filter(
     client,
     fake_user,
     fake_db,
@@ -68,18 +68,18 @@ def test_get_tasks_passes_project_and_archive_filter(
     monkeypatch,
 ):
     tasks = [
-        fake_task_factory(task_id=1, project_id=3),
-        fake_task_factory(task_id=2, project_id=3),
+        fake_task_factory(task_id=1, plan_id=3),
+        fake_task_factory(task_id=2, plan_id=3),
     ]
     mock_service = AsyncMock(return_value=tasks)
     monkeypatch.setattr(
-        "router.task.get_project_tasks_for_user",
+        "router.task.get_plan_tasks_for_user",
         mock_service,
     )
 
     response = client.get(
         "/api/tasks",
-        params={"project_id": 3, "archived": "true"},
+        params={"plan_id": 3, "archived": "true"},
     )
 
     assert response.status_code == 200
@@ -168,7 +168,7 @@ def test_update_task_status_success(
     fake_task_factory,
     monkeypatch,
 ):
-    task = fake_task_factory(task_id=6, status=TaskStatus.DONE)
+    task = fake_task_factory(task_id=6, status=TaskStatus.COMPLETED)
     mock_service = AsyncMock(return_value=task)
     monkeypatch.setattr(
         "router.task.update_task_status_for_user",
@@ -177,13 +177,13 @@ def test_update_task_status_success(
 
     response = client.patch(
         "/api/tasks/6/status",
-        json={"status": "done"},
+        json={"status": "completed"},
     )
 
     assert response.status_code == 200
     mock_service.assert_awaited_once_with(
         6,
-        TaskStatusUpdate(status=TaskStatus.DONE),
+        TaskStatusUpdate(status=TaskStatus.COMPLETED),
         fake_user.user_id,
         fake_db,
     )

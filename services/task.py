@@ -1,33 +1,34 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.datetime_utils import utc_now_naive
-from crud.project import (
-    get_inbox_project_by_owner_user_id,
-    get_project_by_id_and_owner_user_id,
+from crud.plan import (
+    get_inbox_plan_by_owner_user_id,
+    get_plan_by_id_and_owner_user_id,
 )
 from crud.task import (
     create_task_by_data,
     get_task_by_id_and_owner_user_id,
-    get_tasks_by_project_id_and_owner_user_id,
+    get_tasks_by_plan_id_and_owner_user_id,
     has_incomplete_child_tasks,
     has_unarchived_child_tasks,
     update_task_by_data,
 )
-from exceptions.project import ProjectNotFoundError
+from exceptions.plan import PlanNotFoundError
 from exceptions.task import (
     ArchivedTaskModificationError,
     EmptyTaskUpdateError,
-    InboxProjectNotFoundError,
+    InboxPlanNotFoundError,
     IncompleteChildTasksError,
     InvalidTaskStatusTransitionError,
     InvalidTaskTimeRangeError,
-    ParentTaskProjectMismatchError,
+    ParentTaskPlanMismatchError,
     ParentTaskUnavailableError,
-    ProjectUnavailableForTaskError,
+    PlanUnavailableForTaskError,
     TaskHasUnarchivedChildrenError,
+    TaskLevelLimitExceededError,
     TaskNotFoundError,
 )
-from models.enums import CreationSource, ProjectStatus, TaskStatus
+from models.enums import CreationSource, PlanStatus, TaskStatus
 from schemas.task import (
     TaskCreate,
     TaskRead,
@@ -36,26 +37,26 @@ from schemas.task import (
 )
 
 ALLOWED_TASK_STATUS_TRANSITIONS = {
-    TaskStatus.TODO: {
+    TaskStatus.PENDING: {
         TaskStatus.IN_PROGRESS,
-        TaskStatus.DONE,
+        TaskStatus.COMPLETED,
         TaskStatus.CANCELLED,
     },
     TaskStatus.IN_PROGRESS: {
         TaskStatus.BLOCKED,
-        TaskStatus.DONE,
+        TaskStatus.COMPLETED,
         TaskStatus.CANCELLED,
     },
     TaskStatus.BLOCKED: {
         TaskStatus.IN_PROGRESS,
-        TaskStatus.DONE,
+        TaskStatus.COMPLETED,
         TaskStatus.CANCELLED,
     },
-    TaskStatus.DONE: {
-        TaskStatus.TODO,
+    TaskStatus.COMPLETED: {
+        TaskStatus.PENDING,
     },
     TaskStatus.CANCELLED: {
-        TaskStatus.TODO,
+        TaskStatus.PENDING,
     },
 }
 
@@ -66,7 +67,7 @@ async def create_task_for_user(
     db: AsyncSession,
 ) -> TaskRead:
     task_data = task_create.model_dump()
-    requested_project_id = task_data.pop("project_id")
+    requested_plan_id = task_data.pop("plan_id")
     parent_task_id = task_data.get("parent_task_id")
 
     async with db.begin():
@@ -84,47 +85,52 @@ async def create_task_for_user(
                 parent_task.archived_time is not None
                 or parent_task.status
                 in {
-                    TaskStatus.DONE,
+                    TaskStatus.COMPLETED,
                     TaskStatus.CANCELLED,
                 }
             ):
                 raise ParentTaskUnavailableError()
 
+        level = parent_task.level + 1 if parent_task is not None else 1
+        if level > 3:
+            raise TaskLevelLimitExceededError()
+
         if (
             parent_task is not None
-            and requested_project_id is not None
-            and parent_task.project_id != requested_project_id
+            and requested_plan_id is not None
+            and parent_task.plan_id != requested_plan_id
         ):
-            raise ParentTaskProjectMismatchError()
+            raise ParentTaskPlanMismatchError()
 
-        resolved_project_id = requested_project_id
+        resolved_plan_id = requested_plan_id
 
-        if resolved_project_id is None and parent_task is not None:
-            resolved_project_id = parent_task.project_id
+        if resolved_plan_id is None and parent_task is not None:
+            resolved_plan_id = parent_task.plan_id
 
-        if resolved_project_id is None:
-            project = await get_inbox_project_by_owner_user_id(
+        if resolved_plan_id is None:
+            plan = await get_inbox_plan_by_owner_user_id(
                 user_id,
                 db,
             )
-            if project is None:
-                raise InboxProjectNotFoundError()
+            if plan is None:
+                raise InboxPlanNotFoundError()
         else:
-            project = await get_project_by_id_and_owner_user_id(
-                resolved_project_id,
+            plan = await get_plan_by_id_and_owner_user_id(
+                resolved_plan_id,
                 user_id,
                 db,
             )
-            if project is None:
-                raise ProjectNotFoundError()
+            if plan is None:
+                raise PlanNotFoundError()
 
         if (
-            project.archived_time is not None
-            or project.status == ProjectStatus.COMPLETED
+            plan.archived_time is not None
+            or plan.status == PlanStatus.COMPLETED
         ):
-            raise ProjectUnavailableForTaskError()
+            raise PlanUnavailableForTaskError()
 
-        task_data["project_id"] = project.project_id
+        task_data["plan_id"] = plan.plan_id
+        task_data["level"] = level
         task_data["creation_source"] = CreationSource.MANUAL
 
         task = await create_task_by_data(task_data, db)
@@ -148,30 +154,30 @@ async def get_task_for_user(
     return TaskRead.model_validate(task)
 
 
-async def get_project_tasks_for_user(
+async def get_plan_tasks_for_user(
     user_id: int,
     db: AsyncSession,
-    project_id: int | None = None,
+    plan_id: int | None = None,
     archived: bool = False,
 ) -> list[TaskRead]:
-    if project_id is None:
-        project = await get_inbox_project_by_owner_user_id(
+    if plan_id is None:
+        plan = await get_inbox_plan_by_owner_user_id(
             user_id,
             db,
         )
-        if project is None:
-            raise InboxProjectNotFoundError()
+        if plan is None:
+            raise InboxPlanNotFoundError()
     else:
-        project = await get_project_by_id_and_owner_user_id(
-            project_id,
+        plan = await get_plan_by_id_and_owner_user_id(
+            plan_id,
             user_id,
             db,
         )
-        if project is None:
-            raise ProjectNotFoundError()
+        if plan is None:
+            raise PlanNotFoundError()
 
-    tasks = await get_tasks_by_project_id_and_owner_user_id(
-        project.project_id,
+    tasks = await get_tasks_by_plan_id_and_owner_user_id(
+        plan.plan_id,
         user_id,
         db,
         archived,
@@ -202,19 +208,19 @@ async def update_task_for_user(
         if task.archived_time is not None:
             raise ArchivedTaskModificationError()
 
-        project = await get_project_by_id_and_owner_user_id(
-            task.project_id,
+        plan = await get_plan_by_id_and_owner_user_id(
+            task.plan_id,
             user_id,
             db,
         )
-        if project is None:
-            raise ProjectNotFoundError()
+        if plan is None:
+            raise PlanNotFoundError()
 
         if (
-            project.archived_time is not None
-            or project.status == ProjectStatus.COMPLETED
+            plan.archived_time is not None
+            or plan.status == PlanStatus.COMPLETED
         ):
-            raise ProjectUnavailableForTaskError()
+            raise PlanUnavailableForTaskError()
 
         final_start_time = update_data.get(
             "start_time",
@@ -259,19 +265,19 @@ async def update_task_status_for_user(
         if task.archived_time is not None:
             raise ArchivedTaskModificationError()
 
-        project = await get_project_by_id_and_owner_user_id(
-            task.project_id,
+        plan = await get_plan_by_id_and_owner_user_id(
+            task.plan_id,
             user_id,
             db,
         )
-        if project is None:
-            raise ProjectNotFoundError()
+        if plan is None:
+            raise PlanNotFoundError()
 
         if (
-            project.archived_time is not None
-            or project.status == ProjectStatus.COMPLETED
+            plan.archived_time is not None
+            or plan.status == PlanStatus.COMPLETED
         ):
-            raise ProjectUnavailableForTaskError()
+            raise PlanUnavailableForTaskError()
 
         current_status = task.status
         target_status = status_update.status
@@ -286,7 +292,7 @@ async def update_task_status_for_user(
             raise InvalidTaskStatusTransitionError()
 
         if (
-            target_status == TaskStatus.DONE
+            target_status == TaskStatus.COMPLETED
             and await has_incomplete_child_tasks(task.task_id, db)
         ):
             raise IncompleteChildTasksError()
@@ -295,9 +301,9 @@ async def update_task_status_for_user(
             "status": target_status,
         }
 
-        if target_status == TaskStatus.DONE:
+        if target_status == TaskStatus.COMPLETED:
             update_data["completed_time"] = utc_now_naive()
-        elif current_status == TaskStatus.DONE:
+        elif current_status == TaskStatus.COMPLETED:
             update_data["completed_time"] = None
 
         task = await update_task_by_data(
@@ -326,19 +332,19 @@ async def archive_task_for_user(
         if task.archived_time is not None:
             return TaskRead.model_validate(task)
 
-        project = await get_project_by_id_and_owner_user_id(
-            task.project_id,
+        plan = await get_plan_by_id_and_owner_user_id(
+            task.plan_id,
             user_id,
             db,
         )
-        if project is None:
-            raise ProjectNotFoundError()
+        if plan is None:
+            raise PlanNotFoundError()
 
         if (
-            project.archived_time is not None
-            or project.status == ProjectStatus.COMPLETED
+            plan.archived_time is not None
+            or plan.status == PlanStatus.COMPLETED
         ):
-            raise ProjectUnavailableForTaskError()
+            raise PlanUnavailableForTaskError()
 
         if await has_unarchived_child_tasks(task.task_id, db):
             raise TaskHasUnarchivedChildrenError()
@@ -369,19 +375,19 @@ async def restore_task_for_user(
         if task.archived_time is None:
             return TaskRead.model_validate(task)
 
-        project = await get_project_by_id_and_owner_user_id(
-            task.project_id,
+        plan = await get_plan_by_id_and_owner_user_id(
+            task.plan_id,
             user_id,
             db,
         )
-        if project is None:
-            raise ProjectNotFoundError()
+        if plan is None:
+            raise PlanNotFoundError()
 
         if (
-            project.archived_time is not None
-            or project.status == ProjectStatus.COMPLETED
+            plan.archived_time is not None
+            or plan.status == PlanStatus.COMPLETED
         ):
-            raise ProjectUnavailableForTaskError()
+            raise PlanUnavailableForTaskError()
 
         if task.parent_task_id is not None:
             parent_task = await get_task_by_id_and_owner_user_id(
@@ -395,12 +401,12 @@ async def restore_task_for_user(
                 or (
                     parent_task.status
                     in {
-                        TaskStatus.DONE,
+                        TaskStatus.COMPLETED,
                         TaskStatus.CANCELLED,
                     }
                     and task.status
                     not in {
-                        TaskStatus.DONE,
+                        TaskStatus.COMPLETED,
                         TaskStatus.CANCELLED,
                     }
                 )

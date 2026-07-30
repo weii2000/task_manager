@@ -16,11 +16,11 @@ from crud.auth import (
     get_refresh_token_by_token_hash,
     revoke_token_by_token_hash,
 )
-from crud.project import create_project_by_data
+from crud.plan import create_plan_by_data
 from crud.user import create_user, get_user_by_user_id, get_user_by_username
 from exceptions.auth import InvalidCredentialsError, InvalidRefreshTokenError
 from exceptions.user import UsernameAlreadyExistsError
-from models.enums import CreationSource, ProjectStatus, ProjectSystemType
+from models.enums import CreationSource, PlanStatus, PlanSystemType
 from schemas.auth import AuthResponse, LoginRequest, RegisterRequest
 from schemas.user import UserRead
 
@@ -35,13 +35,13 @@ async def register(register_request: RegisterRequest, db: AsyncSession) -> tuple
             hashed_password = get_hashed_password(register_request.password)
             user = await create_user(register_request.username, hashed_password, db)
 
-            await create_project_by_data(
+            await create_plan_by_data(
                 {
                     "owner_user_id": user.user_id,
                     "title": "Inbox",
-                    "status": ProjectStatus.ACTIVE,
+                    "status": PlanStatus.ACTIVE,
                     "creation_source": CreationSource.SYSTEM,
-                    "system_type": ProjectSystemType.INBOX,
+                    "system_type": PlanSystemType.INBOX,
                 },
                 db,
             )

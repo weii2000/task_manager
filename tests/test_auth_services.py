@@ -3,12 +3,12 @@ from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
-from models.enums import CreationSource, ProjectStatus, ProjectSystemType
+from models.enums import CreationSource, PlanStatus, PlanSystemType
 from schemas.auth import RegisterRequest
 from services import auth as auth_service
 
 
-def test_register_creates_inbox_project(monkeypatch):
+def test_register_creates_inbox_plan(monkeypatch):
     user = SimpleNamespace(
         user_id=1,
         username="alice",
@@ -38,11 +38,11 @@ def test_register_creates_inbox_project(monkeypatch):
         "create_user",
         AsyncMock(return_value=user),
     )
-    create_project_mock = AsyncMock()
+    create_plan_mock = AsyncMock()
     monkeypatch.setattr(
         auth_service,
-        "create_project_by_data",
-        create_project_mock,
+        "create_plan_by_data",
+        create_plan_mock,
     )
     monkeypatch.setattr(
         auth_service,
@@ -81,13 +81,13 @@ def test_register_creates_inbox_project(monkeypatch):
         )
     )
 
-    create_project_mock.assert_awaited_once_with(
+    create_plan_mock.assert_awaited_once_with(
         {
             "owner_user_id": user.user_id,
             "title": "Inbox",
-            "status": ProjectStatus.ACTIVE,
+            "status": PlanStatus.ACTIVE,
             "creation_source": CreationSource.SYSTEM,
-            "system_type": ProjectSystemType.INBOX,
+            "system_type": PlanSystemType.INBOX,
         },
         db,
     )

@@ -77,10 +77,10 @@ class EvalExpectation(BaseModel):
 
     allowed_actions: list[Action] = Field(min_length=1)
     required_tool: AvailableTool | None = None
-    require_project: bool | None = None
-    require_project_start_time: bool = False
-    require_project_due_time: bool = False
-    tasks_within_project_window: bool = False
+    require_plan: bool | None = None
+    require_plan_start_time: bool = False
+    require_plan_due_time: bool = False
+    tasks_within_plan_window: bool = False
     min_task_count: int | None = Field(default=None, ge=0)
     max_task_count: int | None = Field(default=None, ge=0)
     min_acceptance_criteria_coverage: float | None = Field(

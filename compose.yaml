@@ -1,6 +1,5 @@
 x-app-environment: &app-environment
-  PROJECT_NAME: "${PROJECT_NAME:-Task Manager}"
-  DATABASE_URL: "mysql+aiomysql://${MYSQL_USER:-task_manager}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE:-task_manager}?charset=utf8mb4"
+  DATABASE_URL: "mysql+aiomysql://${MYSQL_USER:-planwise}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE:-planwise}?charset=utf8mb4"
   SECRET_KEY: "${SECRET_KEY:?Set SECRET_KEY in .env}"
   ACCESS_TOKEN_EXPIRE_MINUTES: "${ACCESS_TOKEN_EXPIRE_MINUTES:-60}"
   REFRESH_TOKEN_EXPIRE_DAYS: "${REFRESH_TOKEN_EXPIRE_DAYS:-7}"
@@ -12,8 +11,8 @@ services:
   db:
     image: mysql:8.4
     environment:
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-task_manager}
-      MYSQL_USER: ${MYSQL_USER:-task_manager}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-planwise}
+      MYSQL_USER: ${MYSQL_USER:-planwise}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
       MYSQL_RANDOM_ROOT_PASSWORD: "yes"
     command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
@@ -26,7 +25,7 @@ services:
       retries: 20
 
   migrate:
-    image: task-manager
+    image: planwise
     environment: *app-environment
     depends_on:
       db:
@@ -34,7 +33,7 @@ services:
     command: [".venv/bin/alembic", "upgrade", "head"]
 
   backend:
-    image: task-manager
+    image: planwise
     build: .
     environment: *app-environment
     depends_on:
@@ -44,7 +43,7 @@ services:
       - "8000:8000"
 
   frontend:
-    image: task-manager
+    image: planwise
     command: [".venv/bin/python", "frontend/server.py", "--api-url", "http://backend:8000", "--host", "0.0.0.0"]
     depends_on:
       - backend

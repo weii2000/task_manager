@@ -9,7 +9,7 @@ from models.base import Base
 from models.enums import CreationSource, TaskPriority, TaskStatus
 
 if TYPE_CHECKING:
-    from models.project import Project
+    from models.plan import Plan
 
 
 class Task(Base):
@@ -18,6 +18,10 @@ class Task(Base):
         CheckConstraint(
             "sort_order >= 0",
             name="ck_tasks_nonnegative_sort_order",
+        ),
+        CheckConstraint(
+            "level BETWEEN 1 AND 3",
+            name="ck_tasks_level",
         ),
         CheckConstraint(
             "start_time IS NULL OR due_time IS NULL OR due_time >= start_time",
@@ -29,9 +33,9 @@ class Task(Base):
         Integer, 
         primary_key=True
     )
-    project_id: Mapped[int] = mapped_column(
+    plan_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("projects.project_id"),
+        ForeignKey("plans.plan_id"),
         nullable=False,
         index=True,
     )
@@ -59,12 +63,16 @@ class Task(Base):
         default=0,
         nullable=False,
     )
+    level: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
     status: Mapped[TaskStatus] = mapped_column(
         SAEnum(
             TaskStatus,
             values_callable=lambda enum_cls: [e.value for e in enum_cls],
         ),
-        default=TaskStatus.TODO,
+        default=TaskStatus.PENDING,
         nullable=False,
     )
     priority: Mapped[TaskPriority] = mapped_column(
@@ -99,8 +107,8 @@ class Task(Base):
         DateTime(timezone=False),
         nullable=True,
     )
-    project: Mapped["Project"] = relationship(
-        "Project",
+    plan: Mapped["Plan"] = relationship(
+        "Plan",
         back_populates="tasks",
     )
     parent: Mapped["Task | None"] = relationship(

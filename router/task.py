@@ -14,7 +14,7 @@ from schemas.task import (
 from services.task import (
     archive_task_for_user,
     create_task_for_user,
-    get_project_tasks_for_user,
+    get_plan_tasks_for_user,
     get_task_for_user,
     restore_task_for_user,
     update_task_for_user,
@@ -50,15 +50,15 @@ async def create_task_api(
 
 @router.get("", response_model=ApiResponse[list[TaskRead]])
 async def get_tasks_api(
-    project_id: int | None = None,
+    plan_id: int | None = None,
     archived: bool = False,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    tasks = await get_project_tasks_for_user(
+    tasks = await get_plan_tasks_for_user(
         current_user.user_id,
         db,
-        project_id,
+        plan_id,
         archived,
     )
     return ApiResponse[list[TaskRead]](

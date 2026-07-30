@@ -1,9 +1,8 @@
-from pydantic import Field, SecretStr
+from pydantic import AnyHttpUrl, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "FastAPI Project"
     DATABASE_URL: str = Field(...)
     SECRET_KEY: str = Field(...)
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
@@ -12,6 +11,10 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: SecretStr
     OPENAI_BASE_URL: str
     OPENAI_MODEL: str
+    MCP_ISSUER_URL: AnyHttpUrl = AnyHttpUrl("http://127.0.0.1:8000")
+    MCP_RESOURCE_SERVER_URL: AnyHttpUrl = AnyHttpUrl(
+        "http://127.0.0.1:8000/mcp"
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -19,4 +22,5 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-settings = Settings() # type: ignore[call-arg]
+
+settings = Settings()  # type: ignore[call-arg]
