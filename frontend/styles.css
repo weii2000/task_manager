@@ -958,9 +958,8 @@ select {
 }
 
 .task-row {
-  --depth: 0;
-  --indent: 0px;
-  --branch-left: 0px;
+  --indent: var(--desktop-indent, 0px);
+  --branch-left: calc(var(--indent) - 12px);
   min-height: 82px;
   position: relative;
   display: grid;
@@ -2190,6 +2189,7 @@ select {
   }
 
   .task-row {
+    --indent: var(--mobile-indent, 0px);
     grid-template-columns: 56px minmax(0, 1fr);
     padding: 15px 14px 15px calc(14px + var(--indent));
   }

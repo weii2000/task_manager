@@ -45,10 +45,10 @@ const PROJECT_STATUS_LABELS = {
 };
 
 const TASK_STATUS_LABELS = {
-  todo: "待处理",
+  pending: "待处理",
   in_progress: "进行中",
   blocked: "受阻",
-  done: "已完成",
+  completed: "已完成",
   cancelled: "已取消",
 };
 
@@ -86,11 +86,11 @@ const MEMORY_SOURCE_LABELS = {
 };
 
 const TASK_TRANSITIONS = {
-  todo: ["todo", "in_progress", "done", "cancelled"],
-  in_progress: ["in_progress", "blocked", "done", "cancelled"],
-  blocked: ["blocked", "in_progress", "done", "cancelled"],
-  done: ["done", "todo"],
-  cancelled: ["cancelled", "todo"],
+  pending: ["pending", "in_progress", "completed", "cancelled"],
+  in_progress: ["in_progress", "blocked", "completed", "cancelled"],
+  blocked: ["blocked", "in_progress", "completed", "cancelled"],
+  completed: ["completed", "pending"],
+  cancelled: ["cancelled", "pending"],
 };
 
 const PROJECT_TRANSITIONS = {
@@ -704,7 +704,7 @@ async function recoverAgentSession(previousStateFingerprint) {
 }
 
 function getExecutedProjectIdFromState(executionState) {
-  const projectId = executionState?.execution?.project_id;
+  const projectId = executionState?.execution?.plan_id;
   if (
     executionState?.phase !== "completed"
     || !Number.isInteger(projectId)
@@ -945,8 +945,8 @@ function openProjectDialog() {
 
 async function loadProjects() {
   const [active, archived] = await Promise.all([
-    api("/api/projects"),
-    api("/api/projects?archived=true"),
+    api("/api/plans"),
+    api("/api/plans?archived=true"),
   ]);
   state.projects = active || [];
   state.archivedProjects = archived || [];
@@ -959,8 +959,8 @@ async function loadProjects() {
       || null;
   } else {
     state.selectedProject =
-      state.projects.find((project) => project.project_id === state.selectedProject.project_id)
-      || state.archivedProjects.find((project) => project.project_id === state.selectedProject.project_id)
+      state.projects.find((project) => project.plan_id === state.selectedProject.plan_id)
+      || state.archivedProjects.find((project) => project.plan_id === state.selectedProject.plan_id)
       || state.projects[0]
       || null;
   }
@@ -970,9 +970,9 @@ async function loadProjects() {
 
 function projectButton(project) {
   const inbox = isDefaultProject(project);
-  const active = state.selectedProject?.project_id === project.project_id;
+  const active = state.selectedProject?.plan_id === project.plan_id;
   return `
-    <button class="project-item ${active ? "active" : ""}" data-project-id="${project.project_id}" type="button">
+    <button class="project-item ${active ? "active" : ""}" data-project-id="${project.plan_id}" type="button">
       <span class="project-symbol">${inbox ? "⌂" : escapeHtml(project.title.slice(0, 1).toUpperCase())}</span>
       <span class="project-name">${inbox ? "待整理" : escapeHtml(project.title)}</span>
       <span class="project-count">${inbox ? "" : PROJECT_STATUS_LABELS[project.status] || ""}</span>
@@ -1016,7 +1016,7 @@ function renderProjectHeader() {
 
 async function selectProject(id) {
   const all = [...state.projects, ...state.archivedProjects];
-  const project = all.find((item) => item.project_id === Number(id));
+  const project = all.find((item) => item.plan_id === Number(id));
   if (!project) throw new Error("项目列表中未找到目标项目");
   state.selectedProject = project;
   state.tasks = [];
@@ -1037,7 +1037,7 @@ async function loadTasks() {
     return;
   }
   const query = new URLSearchParams({
-    project_id: state.selectedProject.project_id,
+    plan_id: state.selectedProject.plan_id,
     archived: state.showArchivedTasks,
   });
   state.tasks = await api(`/api/tasks?${query}`) || [];
@@ -1046,10 +1046,10 @@ async function loadTasks() {
 
 function filteredTasks() {
   if (state.taskFilter === "done") {
-    return state.tasks.filter((task) => task.status === "done");
+    return state.tasks.filter((task) => task.status === "completed");
   }
   if (state.taskFilter === "open") {
-    return state.tasks.filter((task) => !["done", "cancelled"].includes(task.status));
+    return state.tasks.filter((task) => !["completed", "cancelled"].includes(task.status));
   }
   return state.tasks;
 }
@@ -1062,6 +1062,7 @@ function taskStatusOptions(task) {
 
 function renderTaskTree(tasks) {
   const visibleIds = new Set(tasks.map((task) => task.task_id));
+  const maxLevel = Math.max(1, ...tasks.map((task) => Math.max(1, Math.min(task.level, 3))));
   const children = new Map();
   tasks.forEach((task) => {
     const parent = visibleIds.has(task.parent_task_id) ? task.parent_task_id : null;
@@ -1081,7 +1082,7 @@ function renderTaskTree(tasks) {
       const nested = descendantStats(child.task_id, nextAncestors);
       return {
         total: stats.total + 1 + nested.total,
-        done: stats.done + (["done", "cancelled"].includes(child.status) ? 1 : 0) + nested.done,
+        done: stats.done + (["completed", "cancelled"].includes(child.status) ? 1 : 0) + nested.done,
       };
     }, { total: 0, done: 0 });
     statsCache.set(taskId, result);
@@ -1089,21 +1090,21 @@ function renderTaskTree(tasks) {
   }
 
   const visited = new Set();
-  function walk(parentId, depth) {
+  function walk(parentId) {
     return (children.get(parentId) || []).map((task) => {
       if (visited.has(task.task_id)) return "";
       visited.add(task.task_id);
-      const checkDone = task.status === "done";
-      const finished = ["done", "cancelled"].includes(task.status);
+      const level = Math.max(1, Math.min(task.level, 3));
+      const indentRatio = maxLevel === 1 ? 0 : (level - 1) / (maxLevel - 1);
+      const checkDone = task.status === "completed";
+      const finished = ["completed", "cancelled"].includes(task.status);
       const childTasks = children.get(task.task_id) || [];
       const hasChildren = childTasks.length > 0;
+      const hasVisibleParent = visibleIds.has(task.parent_task_id);
       const collapsed = hasChildren && state.collapsedTaskIds.has(task.task_id);
       const stats = hasChildren ? descendantStats(task.task_id) : null;
-      const safeDepth = Math.min(depth, 6);
-      const indent = safeDepth * 28;
-      const branchLeft = 23 + Math.max(safeDepth - 1, 0) * 28 + 18;
       return `
-        <article class="task-row ${finished ? "done" : ""} ${depth ? "is-child" : ""} ${hasChildren ? "has-children" : ""} ${collapsed ? "collapsed" : ""}" style="--depth:${safeDepth}; --indent:${indent}px; --branch-left:${branchLeft}px">
+        <article class="task-row ${finished ? "done" : ""} ${hasVisibleParent ? "is-child" : ""} ${hasChildren ? "has-children" : ""} ${collapsed ? "collapsed" : ""}" data-level="${level}" style="--desktop-indent:${indentRatio * 96}px; --mobile-indent:${indentRatio * 48}px">
           <div class="task-leading">
             ${hasChildren ? `
               <button class="task-disclosure" data-toggle-children="${task.task_id}" type="button" aria-label="${collapsed ? "展开子任务" : "收起子任务"}" aria-expanded="${!collapsed}">
@@ -1131,16 +1132,16 @@ function renderTaskTree(tasks) {
               <button class="icon-button" data-restore-task="${task.task_id}" type="button" aria-label="恢复任务" title="恢复任务">${ICONS.restore}</button>
             ` : `
               <button class="icon-button" data-edit-task="${task.task_id}" type="button" aria-label="编辑任务" title="编辑任务">${ICONS.edit}</button>
-              ${["done", "cancelled"].includes(task.status) ? "" : `<button class="icon-button" data-child-task="${task.task_id}" type="button" aria-label="添加子任务" title="添加子任务">${ICONS.child}</button>`}
+              ${["completed", "cancelled"].includes(task.status) ? "" : `<button class="icon-button" data-child-task="${task.task_id}" type="button" aria-label="添加子任务" title="添加子任务">${ICONS.child}</button>`}
               <button class="icon-button danger" data-archive-task="${task.task_id}" type="button" aria-label="归档任务" title="归档任务">${ICONS.archive}</button>
             `}
           </div>
         </article>
-        ${collapsed ? "" : walk(task.task_id, depth + 1)}
+        ${collapsed ? "" : walk(task.task_id)}
       `;
     }).join("");
   }
-  return walk(null, 0);
+  return walk(null);
 }
 
 function renderTasks() {
@@ -1149,7 +1150,7 @@ function renderTasks() {
   $("emptyState").classList.toggle("hidden", tasks.length > 0);
 
   const total = state.tasks.length;
-  const done = state.tasks.filter((task) => ["done", "cancelled"].includes(task.status)).length;
+  const done = state.tasks.filter((task) => ["completed", "cancelled"].includes(task.status)).length;
   const active = state.tasks.filter((task) => ["in_progress", "blocked"].includes(task.status)).length;
   const progress = total ? Math.round((done / total) * 100) : 0;
   $("totalMetric").textContent = total;
@@ -1495,7 +1496,7 @@ $("cancelProjectButton").addEventListener("click", () => $("projectForm").classL
 $("projectForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
-    const project = await api("/api/projects", {
+    const project = await api("/api/plans", {
       method: "POST",
       body: JSON.stringify({
         title: $("projectTitle").value.trim(),
@@ -1547,7 +1548,7 @@ $("projectStatusSelect").addEventListener("change", async (event) => {
   const project = state.selectedProject;
   if (!project || event.target.value === project.status) return;
   try {
-    await api(`/api/projects/${project.project_id}/status`, {
+    await api(`/api/plans/${project.plan_id}/status`, {
       method: "PATCH",
       body: JSON.stringify({ status: event.target.value }),
     });
@@ -1570,7 +1571,7 @@ $("projectEditForm").addEventListener("submit", async (event) => {
   $("projectEditError").textContent = "";
   $("projectEditSubmitButton").disabled = true;
   try {
-    state.selectedProject = await api(`/api/projects/${project.project_id}`, {
+    state.selectedProject = await api(`/api/plans/${project.plan_id}`, {
       method: "PATCH",
       body: JSON.stringify({
         title: $("editProjectTitle").value.trim(),
@@ -1592,7 +1593,7 @@ $("projectEditForm").addEventListener("submit", async (event) => {
 $("archiveProjectButton").addEventListener("click", async () => {
   if (!state.selectedProject) return;
   try {
-    await api(`/api/projects/${state.selectedProject.project_id}`, { method: "DELETE" });
+    await api(`/api/plans/${state.selectedProject.plan_id}`, { method: "DELETE" });
     state.selectedProject = null;
     await loadProjects();
     await loadTasks();
@@ -1605,7 +1606,7 @@ $("archiveProjectButton").addEventListener("click", async () => {
 $("restoreProjectButton").addEventListener("click", async () => {
   if (!state.selectedProject) return;
   try {
-    const project = await api(`/api/projects/${state.selectedProject.project_id}/restore`, { method: "POST" });
+    const project = await api(`/api/plans/${state.selectedProject.plan_id}/restore`, { method: "POST" });
     state.selectedProject = project;
     await loadProjects();
     await loadTasks();
@@ -1648,7 +1649,7 @@ $("taskForm").addEventListener("submit", async (event) => {
       await api("/api/tasks", {
         method: "POST",
         body: JSON.stringify({
-          project_id: state.selectedProject.project_id,
+          plan_id: state.selectedProject.plan_id,
           parent_task_id: state.parentTask?.task_id || null,
           ...taskData,
         }),
@@ -1717,7 +1718,7 @@ $("taskList").addEventListener("click", async (event) => {
   try {
     if (completeButton) {
       const task = state.tasks.find((item) => item.task_id === Number(completeButton.dataset.completeTask));
-      const targetStatus = ["done", "cancelled"].includes(task.status) ? "todo" : "done";
+      const targetStatus = ["completed", "cancelled"].includes(task.status) ? "pending" : "completed";
       await changeTaskStatus(task.task_id, targetStatus);
     } else if (editButton) {
       const task = state.tasks.find((item) => item.task_id === Number(editButton.dataset.editTask));
